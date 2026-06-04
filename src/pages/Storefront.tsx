@@ -3,6 +3,15 @@ import { ShoppingBag, Search, Menu, X, ArrowRight, ShieldCheck, Truck, Clock, He
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Product, Promotion } from '../types';
+import heic2any from 'heic2any';
+
+interface BuktiPembayaranFormData {
+  imageUrl: string;
+}
+
+const EMPTY_EVIDENCE_FORM: BuktiPembayaranFormData = {
+  imageUrl: '',
+};
 
 export function Storefront({
   products,
@@ -40,6 +49,7 @@ export function Storefront({
   const [isServicesModalOpen, setIsServicesModalOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const heroProducts = products.slice(0, 5);
+  const [formData, setFormData] = useState<BuktiPembayaranFormData>(EMPTY_EVIDENCE_FORM);
 
   const goToNext = useCallback(() => {
     setHeroIndex(prev => (prev + 1) % Math.max(heroProducts.length, 1));
@@ -167,6 +177,77 @@ export function Storefront({
 
   const cartTotal = cart.reduce((sum, item) => sum + (getFinalPrice(item.product) * item.quantity), 0);
 
+  const [selectedPayment, setSelectedPayment] = useState<string>('bca');
+
+  // ── Image Upload ───────────────────────────────────────────────────────────
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const isHeic =
+        file.type === 'image/heic' ||
+        file.type === 'image/heif' ||
+        file.name.toLowerCase().endsWith('.heic') ||
+        file.name.toLowerCase().endsWith('.heif');
+
+      if (isHeic) {
+        // heic2any can return Blob or Blob[] depending on the source
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg' });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        file = new File([blob], file.name.replace(/\.heic$/i, '.jpeg'), {
+          type: 'image/jpeg',
+        });
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      img.onload = (): void => {
+        const MAX_SIZE = 800;
+        let { width, height } = img;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round(height * (MAX_SIZE / width));
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round(width * (MAX_SIZE / height));
+            height = MAX_SIZE;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          console.error('Could not get 2D canvas context');
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const resizedBase64 = canvas.toDataURL('image/webp', 0.8);
+        setFormData(prev => ({ ...prev, imageUrl: resizedBase64 }));
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      img.onerror = (): void => {
+        console.error('Failed to load image for resizing');
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      img.src = objectUrl;
+    } catch (err) {
+      console.error('Error processing image:', err);
+      alert('Gagal memproses gambar. Pastikan format didukung.');
+    }
+  };
+
   const handleCheckoutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (checkoutStep === 1) setCheckoutStep(2);
@@ -216,19 +297,6 @@ export function Storefront({
 
   return (
     <div className="min-h-screen bg-white text-gray-900 font-sans selection:bg-blue-100">
-      {/* Top Alert Banner */}
-      <div className="bg-[#0066cc] text-white text-xs md:text-sm py-2.5 px-4 flex justify-between items-center text-center">
-        <div className="w-full text-center">
-          Waspada terhadap upaya penipuan yang mengatasnamakan toko kami. Info selengkapnya, <a href="#" className="font-semibold underline">klik di sini</a>
-        </div>
-      </div>
-
-      {/* Store Selector */}
-      <div className="border-b border-gray-100 text-sm py-2.5 px-4 text-gray-600 flex items-center bg-gray-50/50">
-        <div className="max-w-7xl mx-auto w-full flex items-center">
-          <span className="mr-2 text-lg">🏪</span> <span className="font-medium">Pilih toko</span>
-        </div>
-      </div>
 
       {/* Navigation */}
       <nav className="sticky top-0 z-40 w-full bg-white border-b border-gray-200 shadow-sm/50">
@@ -241,18 +309,28 @@ export function Storefront({
               >
                 <Menu className="w-6 h-6" />
               </button>
-              <button 
-                onClick={() => { document.getElementById('products')?.scrollIntoView({behavior: 'smooth'}) }} 
-                className="flex items-center gap-2 md:gap-3 cursor-pointer"
-              >
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded bg-black text-white flex items-center justify-center font-bold text-lg md:text-xl">
-                  S
+
+              <div className="flex items-center gap-2 md:gap-3">
+                {/* Logo & nama toko — pakai div + onClick, bukan button */}
+                <div
+                  onClick={() => { document.getElementById('products')?.scrollIntoView({behavior: 'smooth'}) }}
+                  className="flex items-center gap-2 md:gap-3 cursor-pointer"
+                >
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded bg-black text-white flex items-center justify-center font-bold text-lg md:text-xl">
+                    S
+                  </div>
+                  <span className="text-2xl md:text-3xl font-bold tracking-tighter text-black uppercase">SEADANYA STORE</span>
                 </div>
-                <span className="text-2xl md:text-3xl font-bold tracking-tighter text-black uppercase">SEADANYA STORE</span>
-                <div className="hidden md:flex border border-gray-300 rounded-md px-2 py-1 text-[10px] font-semibold items-center gap-1.5 shadow-sm">
-                  <span className="text-sm">🍎</span> Premium Partner
+
+                {/* Badge Premium Partner — sekarang sibling, bukan child dari button */}
+                <div
+                  onClick={() => { setIsServicesModalOpen(true); setIsMobileMenuOpen(false); }}
+                  className="hidden md:flex border border-gray-300 rounded-md px-2 py-1 text-[10px] font-semibold items-center gap-1.5 shadow-sm cursor-pointer hover:bg-gray-50 transition"
+                >
+                  🍎 Premium Partner
                 </div>
-              </button>
+              </div>
+
               <div className="hidden md:flex items-center ml-10 space-x-6">
                 <button onClick={() => { document.getElementById('products')?.scrollIntoView({behavior: 'smooth'}) }} className="text-sm font-medium text-gray-600 hover:text-black transition">Semua Produk</button>
                 <button onClick={() => { document.getElementById('promotions')?.scrollIntoView({behavior: 'smooth'}) }} className="text-sm font-medium text-[#0066cc] hover:text-blue-800 transition">Promo Spesial</button>
@@ -297,27 +375,6 @@ export function Storefront({
                     </span>
                   )}
                 </button>
-                <div className="relative">
-                  <button 
-                    onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                    className="p-2.5 text-black hover:bg-gray-100 transition rounded-full"
-                  >
-                    <MoreVertical className="w-5 h-5 md:w-6 md:h-6" />
-                  </button>
-                  {isMoreMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setIsMoreMenuOpen(false)}></div>
-                      <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in fade-in zoom-in-95">
-                        <button 
-                          onClick={() => { setIsServicesModalOpen(true); setIsMoreMenuOpen(false); }}
-                          className="w-full text-left px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 transition"
-                        >
-                          Layanan Kami
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
               </div>
             </div>
           </div>
@@ -1117,9 +1174,9 @@ export function Storefront({
                         onChange={(e) => setShippingCost(Number(e.target.value))}
                       >
                         <option value="0">Lainnya (Transaksi Langsung Tanpa Ekspedisi)</option>
-                        <option value="15000">JNE Reguler, Packing Kayu & Asuransi (Estimasi Rp 125.000)</option>
-                        <option value="12000">J&T Express, Packing Kayu & Asuransi (Estimasi Rp 125.000)</option>
-                        <option value="10000">SiCepat HALU, Packing Kayu & Asuransi (Estimasi Rp 125.000)</option>
+                        <option value="125000">JNE Reguler, Packing Kayu & Asuransi (Estimasi Rp 125.000)</option>
+                        <option value="125000">J&T Express, Packing Kayu & Asuransi (Estimasi Rp 125.000)</option>
+                        <option value="125000">SiCepat HALU, Packing Kayu & Asuransi (Estimasi Rp 125.000)</option>
                       </select>
                     </div>
                   </div>
@@ -1129,42 +1186,34 @@ export function Storefront({
                   <div className="space-y-4 animate-in slide-in-from-right-4">
                     <h3 className="font-semibold text-lg text-black mb-4">Metode Pembayaran</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <label className="flex items-start p-4 border border-apple-200 rounded-xl cursor-pointer hover:bg-apple-50 hover:border-apple-blue transition group">
-                        <div className="pt-0.5">
-                          <input type="radio" name="payment" className="w-4 h-4 text-apple-blue" defaultChecked />
-                        </div>
-                        <div className="ml-3">
-                          <span className="font-medium text-black block mb-1">BCA Virtual Account</span>
-                          <span className="text-xs text-apple-400">Verifikasi otomatis, sisa waktu 24 jam</span>
-                        </div>
-                      </label>
-                      <label className="flex items-start p-4 border border-apple-200 rounded-xl cursor-pointer hover:bg-apple-50 hover:border-apple-blue transition group">
-                        <div className="pt-0.5">
-                          <input type="radio" name="payment" className="w-4 h-4 text-apple-blue" />
-                        </div>
-                        <div className="ml-3">
-                          <span className="font-medium text-black block mb-1">Mandiri Virtual Account</span>
-                          <span className="text-xs text-apple-400">Verifikasi otomatis</span>
-                        </div>
-                      </label>
-                      <label className="flex items-start p-4 border border-apple-200 rounded-xl cursor-pointer hover:bg-apple-50 hover:border-apple-blue transition group">
-                        <div className="pt-0.5">
-                          <input type="radio" name="payment" className="w-4 h-4 text-apple-blue" />
-                        </div>
-                        <div className="ml-3">
-                          <span className="font-medium text-black block mb-1">GoPay / QRIS</span>
-                          <span className="text-xs text-apple-400">Scan QR Code dengan aplikasi favoritmu</span>
-                        </div>
-                      </label>
-                      <label className="flex items-start p-4 border border-apple-200 rounded-xl cursor-pointer hover:bg-apple-50 hover:border-apple-blue transition group">
-                        <div className="pt-0.5">
-                          <input type="radio" name="payment" className="w-4 h-4 text-apple-blue" />
-                        </div>
-                        <div className="ml-3">
-                          <span className="font-medium text-black block mb-1">Bayar di Tempat (COD)</span>
-                          <span className="text-xs text-apple-400">Bayar tunai kepada kurir saat pesanan tiba</span>
-                        </div>
-                      </label>
+                      {[
+                        { value: 'bca', label: 'BCA Virtual Account', desc: 'Verifikasi otomatis, sisa waktu 24 jam' },
+                        { value: 'mandiri', label: 'Mandiri Virtual Account', desc: 'Verifikasi otomatis' },
+                        { value: 'qris', label: 'QRIS', desc: 'Scan QR Code dengan aplikasi favoritmu' },
+                        { value: 'cod', label: 'Bayar di Tempat (COD)', desc: 'Bayar tunai kepada kurir saat pesanan tiba' },
+                      ].map((method) => (
+                        <label
+                          key={method.value}
+                          className={`flex items-start p-4 border rounded-xl cursor-pointer hover:bg-apple-50 transition group ${
+                            selectedPayment === method.value ? 'border-apple-blue bg-apple-50' : 'border-apple-200'
+                          }`}
+                        >
+                          <div className="pt-0.5">
+                            <input
+                              type="radio"
+                              name="payment"
+                              value={method.value}
+                              checked={selectedPayment === method.value}
+                              onChange={(e) => setSelectedPayment(e.target.value)}
+                              className="w-4 h-4 text-apple-blue"
+                            />
+                          </div>
+                          <div className="ml-3">
+                            <span className="font-medium text-black block mb-1">{method.label}</span>
+                            <span className="text-xs text-apple-400">{method.desc}</span>
+                          </div>
+                        </label>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1189,13 +1238,80 @@ export function Storefront({
                         <span className="font-bold text-xl text-black">Rp {(cartTotal + shippingCost).toLocaleString('id-ID')}</span>
                       </div>
                     </div>
-                    
-                    <div className="bg-apple-50 p-6 rounded-2xl text-sm text-left mt-8 border border-apple-100">
-                      <p className="flex items-start gap-2 text-apple-500">
-                        <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
-                        Kode OTP untuk verifikasi transaksi telah dikirimkan ke nomor WhatsApp Anda. Lanjutkan untuk menyelesaikan pembayaran.
-                      </p>
+
+                    {/* Info pembayaran dinamis berdasarkan metode */}
+                    <div className="bg-apple-50 p-6 rounded-2xl text-sm text-left mt-4 border border-apple-100 space-y-2">
+                      {selectedPayment === 'bca' && (
+                        <>
+                          <p className="flex items-start gap-2 text-apple-500">
+                            <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
+                            Transfer ke <strong className="text-black">BCA Virtual Account</strong>
+                          </p>
+                          <p className="flex items-start gap-2 text-apple-500">
+                            <span className="text-apple-blue flex-shrink-0 mt-0.5">🏦</span>
+                            No. Rekening: <strong className="text-black ml-1">7741062520</strong> a.n. Viqri Firmansyah
+                          </p>
+                        </>
+                      )}
+                      {selectedPayment === 'mandiri' && (
+                        <>
+                          <p className="flex items-start gap-2 text-apple-500">
+                            <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
+                            Transfer ke <strong className="text-black">Mandiri Virtual Account</strong>
+                          </p>
+                          <p className="flex items-start gap-2 text-apple-500">
+                            <span className="text-apple-blue flex-shrink-0 mt-0.5">🏦</span>
+                            No. Rekening: <strong className="text-black ml-1">1310025111396</strong> a.n. Junaedi
+                          </p>
+                        </>
+                      )}
+                      {selectedPayment === 'qris' && (
+                        <div className="flex flex-col items-center gap-4">
+                          <p className="flex items-start gap-2 text-apple-500 w-full">
+                            <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
+                            Bayar via <strong className="text-black ml-1">QRIS</strong>
+                          </p>
+                          {/* QR Code menggunakan Google Charts API — ganti URL sesuai QR asli jika ada */}
+                          <div className="flex flex-col items-center gap-2 mt-2">
+                            <p className="text-xs text-apple-400">Atau scan QR Code berikut:</p>
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=085861969844`}
+                              alt="QR Code GoPay"
+                              className="w-40 h-40 rounded-xl border border-apple-200 shadow-sm"
+                            />
+                            <p className="text-xs text-apple-400">Scan menggunakan aplikasi QRIS apapun</p>
+                          </div>
+                        </div>
+                      )}
+                      {selectedPayment === 'cod' && (
+                        <p className="flex items-start gap-2 text-apple-500">
+                          <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
+                          Pesanan akan dibayar tunai saat kurir tiba. Pastikan Anda berada di lokasi pengiriman.
+                        </p>
+                      )}
                     </div>
+
+                    {/* Upload bukti hanya untuk metode non-COD */}
+                    {selectedPayment !== 'cod' && (
+                      <div className="flex flex-col items-center gap-4">
+                        <label className="text-sm font-medium text-gray-700">Upload Bukti Pembayaran</label>
+                        <div className="flex items-center gap-4">
+                          {formData.imageUrl && (
+                            <img
+                              src={formData.imageUrl}
+                              alt="Preview"
+                              className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                            />
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*, .heic, .heif"
+                            onChange={handleImageUpload}
+                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1257,14 +1373,32 @@ export function Storefront({
                         </div>
                       </div>
 
-                      <div className="bg-blue-50 text-[#0066cc] p-4 rounded-xl mt-6 text-sm flex items-center justify-between">
-                         <div>
-                           <p className="font-semibold mb-0.5">Poin Loyalty Diperoleh</p>
-                           <p className="text-blue-600 opacity-80">+ {completedOrder.loyaltyPoints} Poin</p>
-                         </div>
-                         <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">
-                           🎉
-                         </div>
+                      <div className="bg-apple-50 p-6 rounded-2xl text-sm text-left mt-8 border border-apple-100 space-y-2">
+                        {selectedPayment === 'cod' ? (
+                          <>
+                            <p className="flex items-start gap-2 text-apple-500">
+                              <span className="text-apple-blue flex-shrink-0 mt-0.5">💵</span>
+                              Siapkan uang tunai sebesar Rp. {(completedOrder.total + shippingCost).toLocaleString('id-ID')} untuk diserahkan kepada kurir saat pesanan tiba.
+                            </p>
+                            <p className="flex items-start gap-2 text-apple-500">
+                              <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
+                              Pastikan Anda atau perwakilan Anda berada di lokasi pengiriman ketika kurir datang.
+                            </p>
+                          </>
+                        ) : (
+                          <p className="flex items-start gap-2 text-apple-500">
+                            <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
+                            Konfirmasi pembayaran lewat WhatsApp{" "}
+                            <a
+                              href="https://wa.me/085861969844"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-apple-blue underline hover:opacity-75 transition"
+                            >
+                              Disini
+                            </a>
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1275,7 +1409,7 @@ export function Storefront({
                     <Button type="button" variant="ghost" onClick={() => setCheckoutStep(s => s - 1)}>Kembali</Button>
                   ) : <div />}
                   <Button type="submit" size="lg" className={checkoutStep === 3 ? "w-full max-w-xs mx-auto" : "px-8"}>
-                    {checkoutStep === 3 ? 'Bayar Sekarang' : checkoutStep === 4 ? 'Tutup Invoice' : 'Lanjutkan'}
+                    {checkoutStep === 3 ? 'Kirim Bukti Pembayaran' : checkoutStep === 4 ? 'Tutup Invoice' : 'Lanjutkan'}
                   </Button>
                 </div>
               </form>
@@ -1283,6 +1417,7 @@ export function Storefront({
           </Card>
         </div>
       )}
+      
       {/* Chat Widget */}
       <div className="fixed bottom-6 right-6 z-50">
         {isChatOpen && (
