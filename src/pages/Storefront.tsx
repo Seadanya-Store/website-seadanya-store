@@ -1189,7 +1189,6 @@ export function Storefront({
                       {[
                         { value: 'bca', label: 'BCA Virtual Account', desc: 'Verifikasi otomatis, sisa waktu 24 jam' },
                         { value: 'mandiri', label: 'Mandiri Virtual Account', desc: 'Verifikasi otomatis' },
-                        { value: 'qris', label: 'QRIS', desc: 'Scan QR Code dengan aplikasi favoritmu' },
                         { value: 'cod', label: 'Bayar di Tempat (COD)', desc: 'Bayar tunai kepada kurir saat pesanan tiba' },
                       ].map((method) => (
                         <label
@@ -1264,24 +1263,6 @@ export function Storefront({
                             No. Rekening: <strong className="text-black ml-1">1310025111396</strong> a.n. Junaedi
                           </p>
                         </>
-                      )}
-                      {selectedPayment === 'qris' && (
-                        <div className="flex flex-col items-center gap-4">
-                          <p className="flex items-start gap-2 text-apple-500 w-full">
-                            <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
-                            Bayar via <strong className="text-black ml-1">QRIS</strong>
-                          </p>
-                          {/* QR Code menggunakan Google Charts API — ganti URL sesuai QR asli jika ada */}
-                          <div className="flex flex-col items-center gap-2 mt-2">
-                            <p className="text-xs text-apple-400">Atau scan QR Code berikut:</p>
-                            <img
-                              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=085861969844`}
-                              alt="QR Code GoPay"
-                              className="w-40 h-40 rounded-xl border border-apple-200 shadow-sm"
-                            />
-                            <p className="text-xs text-apple-400">Scan menggunakan aplikasi QRIS apapun</p>
-                          </div>
-                        </div>
                       )}
                       {selectedPayment === 'cod' && (
                         <p className="flex items-start gap-2 text-apple-500">

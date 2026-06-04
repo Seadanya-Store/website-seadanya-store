@@ -1,5 +1,5 @@
 {
-  "homepage": "https://github.io",
+  "homepage": "https://github.com/FaridzMP/web-seadanya-store",
   "name": "react-example",
   "private": true,
   "version": "0.0.0",
@@ -48,9 +48,9 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/viqrifmnsyh/web-seadanya-apple.git"
+    "url": "git+https://github.com/faridzmp/web-seadanya-apple.git"
   },
   "bugs": {
-    "url": "https://github.com/viqrifmnsyh/web-seadanya-apple/issues"
+    "url": "https://github.com/faridzmp/web-seadanya-apple/issues"
   }
 }
