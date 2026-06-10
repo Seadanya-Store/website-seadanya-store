@@ -16,6 +16,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { Tag } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -425,31 +426,269 @@ export function AdminDashboard({
 
   // ── Export ─────────────────────────────────────────────────────────────────
   const handleExportLedger = (): void => {
-    if (filteredLedger.length === 0) {
-      alert('Tidak ada data transaksi untuk diekspor.');
-      return;
-    }
-    const headers = ['ID', 'Tipe', 'Tanggal', 'Keterangan', 'Jumlah (Rp)'].join(',');
-    const rows = filteredLedger.map(l => {
-      const typeStr = l.type === 'income' ? 'Pemasukan' : 'Pengeluaran';
-      const desc = `"${l.description.replace(/"/g, '""')}"`;
-      return `${l.id},${typeStr},"${l.date}",${desc},${l.amount}`;
+  const wb = XLSX.utils.book_new();
+
+  // ── Warna & Style Helper ───────────────────────────────────────────────────
+  // (SheetJS Community Edition tidak support rich styling — untuk style penuh
+  //  gunakan SheetJS Pro. Di bawah ini pakai struktur data yang rapi saja.)
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 1: RINGKASAN EKSEKUTIF
+  // ══════════════════════════════════════════════════════════════════════════
+  const totalOrderRev = filteredOrders.reduce((s, o) => s + o.totalAmount, 0);
+  const totalLedgerInc = filteredLedger
+    .filter(l => l.type === 'income')
+    .reduce((s, l) => s + l.amount, 0);
+  const totalRev = totalOrderRev + totalLedgerInc;
+
+  const totalModalCalc = filteredOrders.reduce((sum, order) =>
+    sum + order.items.reduce((itemSum, item) => {
+      const cost = item.product.costPrice ?? item.product.price * 0.65;
+      return itemSum + cost * item.quantity;
+    }, 0), 0);
+
+  const totalOpex = filteredLedger
+    .filter(l => l.type === 'expense')
+    .reduce((s, l) => s + l.amount, 0);
+  const netProfitCalc = totalRev - totalModalCalc - totalOpex;
+  const marginPct = totalRev > 0 ? ((netProfitCalc / totalRev) * 100).toFixed(1) : '0.0';
+
+  const periodLabel =
+    filterMode === 'date' ? filterDate :
+    filterMode === 'month' ? filterMonth : 'Semua Waktu';
+
+  const summaryData = [
+    ['LAPORAN KEUANGAN — SEADANYA STORE'],
+    [`Periode: ${periodLabel}`],
+    [`Diekspor: ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}`],
+    [],
+    ['RINGKASAN EKSEKUTIF'],
+    ['Keterangan', 'Jumlah (Rp)'],
+    ['Total Pendapatan (Omzet)', totalRev],
+    ['  ↳ Dari Pesanan', totalOrderRev],
+    ['  ↳ Dari Kas Manual', totalLedgerInc],
+    ['Total Modal / HPP', totalModalCalc],
+    ['Total Pengeluaran Operasional', totalOpex],
+    ['─────────────────────────', '─────────────'],
+    ['LABA BERSIH', netProfitCalc],
+    ['Margin Keuntungan (%)', `${marginPct}%`],
+    [],
+    ['Total Transaksi Pesanan', filteredOrders.length],
+    ['Total Entri Kas Manual', filteredLedger.length],
+  ];
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  wsSummary['!cols'] = [{ wch: 38 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, '📊 Ringkasan');
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 2: DATA PESANAN
+  // ══════════════════════════════════════════════════════════════════════════
+  const orderRows: (string | number)[][] = [
+    ['DATA PESANAN'],
+    [`Periode: ${periodLabel}`],
+    [],
+    [
+      'ID Pesanan', 'Tanggal', 'Pelanggan', 'Status',
+      'Item', 'Modal (Rp)', 'Harga Jual (Rp)', 'Laba Kotor (Rp)',
+    ],
+  ];
+
+  // Subtotal per bulan
+  const ordersByMonth: Record<string, typeof filteredOrders> = {};
+  filteredOrders.forEach(order => {
+    const month = order.date.slice(0, 7); // "YYYY-MM"
+    if (!ordersByMonth[month]) ordersByMonth[month] = [];
+    ordersByMonth[month].push(order);
+  });
+
+  Object.entries(ordersByMonth)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([month, monthOrders]) => {
+      // Header bulan
+      const [y, m] = month.split('-');
+      const monthLabel = new Date(Number(y), Number(m) - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      orderRows.push([`── ${monthLabel} ──`, '', '', '', '', '', '', '']);
+
+      let monthRev = 0, monthModal = 0;
+
+      monthOrders.forEach(order => {
+        const modal = order.items.reduce((s, item) => {
+          const cost = item.product.costPrice ?? item.product.price * 0.65;
+          return s + cost * item.quantity;
+        }, 0);
+        const itemNames = order.items.map(i => `${i.product.title} x${i.quantity}`).join(', ');
+        const labaKotor = order.totalAmount - modal;
+        monthRev += order.totalAmount;
+        monthModal += modal;
+
+        orderRows.push([
+          order.id,
+          new Date(order.date).toLocaleDateString('id-ID'),
+          order.customerName,
+          order.status,
+          itemNames,
+          modal,
+          order.totalAmount,
+          labaKotor,
+        ]);
+      });
+
+      // Subtotal baris
+      orderRows.push([
+        `SUBTOTAL ${monthLabel}`, '', '', '', '',
+        monthModal, monthRev, monthRev - monthModal,
+      ]);
+      orderRows.push([]);
     });
 
-    const csvContent = [headers, ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute(
-      'download',
-      `Laporan_Pembukuan_${filterMode}_${new Date().toISOString().split('T')[0]}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const wsOrders = XLSX.utils.aoa_to_sheet(orderRows);
+  wsOrders['!cols'] = [
+    { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 24 },
+    { wch: 40 }, { wch: 18 }, { wch: 18 }, { wch: 18 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsOrders, '🛒 Pesanan');
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 3: KAS MANUAL (LEDGER)
+  // ══════════════════════════════════════════════════════════════════════════
+  const ledgerRows: (string | number)[][] = [
+    ['KAS MANUAL — ARUS KAS'],
+    [`Periode: ${periodLabel}`],
+    [],
+    ['ID Transaksi', 'Tanggal', 'Tipe', 'Kategori', 'Keterangan', 'Jumlah (Rp)', 'Laba Bersih Kumulatif (Rp)'],
+  ];
+
+  // Kelompok per bulan + deteksi kategori otomatis dari kata kunci
+  const detectCategory = (desc: string): string => {
+    const d = desc.toLowerCase();
+    if (d.includes('listrik') || d.includes('air') || d.includes('internet')) return 'Utilitas';
+    if (d.includes('gaji') || d.includes('pegawai') || d.includes('karyawan')) return 'SDM';
+    if (d.includes('iklan') || d.includes('promosi') || d.includes('marketing')) return 'Marketing';
+    if (d.includes('sewa') || d.includes('rental')) return 'Sewa';
+    if (d.includes('beli') || d.includes('stok') || d.includes('produk')) return 'Pembelian Stok';
+    if (d.includes('pajak') || d.includes('tax')) return 'Pajak';
+    if (d.includes('penjualan') || d.includes('jual') || d.includes('bayar')) return 'Penjualan';
+    return 'Lain-lain';
   };
+
+  const ledgerByMonth: Record<string, typeof filteredLedger> = {};
+  filteredLedger.forEach(l => {
+    const month = l.date.slice(0, 7);
+    if (!ledgerByMonth[month]) ledgerByMonth[month] = [];
+    ledgerByMonth[month].push(l);
+  });
+
+  let cumulativeNet = 0;
+
+  Object.entries(ledgerByMonth)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([month, entries]) => {
+      const [y, m] = month.split('-');
+      const monthLabel = new Date(Number(y), Number(m) - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      ledgerRows.push([`── ${monthLabel} ──`, '', '', '', '', '', '']);
+
+      let monthIncome = 0, monthExpense = 0;
+
+      entries.forEach(trx => {
+        const isIncome = trx.type === 'income';
+        const signed = isIncome ? trx.amount : -trx.amount;
+        cumulativeNet += signed;
+        monthIncome += isIncome ? trx.amount : 0;
+        monthExpense += !isIncome ? trx.amount : 0;
+
+        ledgerRows.push([
+          trx.id,
+          new Date(trx.date).toLocaleDateString('id-ID'),
+          isIncome ? 'Pemasukan' : 'Pengeluaran',
+          detectCategory(trx.description),
+          trx.description,
+          isIncome ? trx.amount : -trx.amount,
+          cumulativeNet,
+        ]);
+      });
+
+      ledgerRows.push([
+        `SUBTOTAL ${monthLabel}`, '', '', '', '',
+        monthIncome - monthExpense, '',
+      ]);
+      ledgerRows.push([]);
+    });
+
+  const wsLedger = XLSX.utils.aoa_to_sheet(ledgerRows);
+  wsLedger['!cols'] = [
+    { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 18 },
+    { wch: 36 }, { wch: 22 }, { wch: 28 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsLedger, '📒 Kas Manual');
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHEET 4: REKAP LABA RUGI PER BULAN
+  // ══════════════════════════════════════════════════════════════════════════
+  const allMonths = Array.from(new Set([
+    ...filteredOrders.map(o => o.date.slice(0, 7)),
+    ...filteredLedger.map(l => l.date.slice(0, 7)),
+  ])).sort();
+
+  const plRows: (string | number)[][] = [
+    ['REKAP LABA RUGI PER BULAN'],
+    [`Periode: ${periodLabel}`],
+    [],
+    ['Bulan', 'Pendapatan Pesanan (Rp)', 'Pendapatan Kas (Rp)', 'Total Pendapatan (Rp)',
+     'Modal HPP (Rp)', 'Biaya Operasional (Rp)', 'Laba Bersih (Rp)', 'Margin (%)'],
+  ];
+
+  let grandRev = 0, grandModal = 0, grandOpex = 0, grandProfit = 0;
+
+  allMonths.forEach(month => {
+    const [y, m] = month.split('-');
+    const monthLabel = new Date(Number(y), Number(m) - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
+    const monthOrders = filteredOrders.filter(o => o.date.startsWith(month));
+    const monthLedger = filteredLedger.filter(l => l.date.startsWith(month));
+
+    const revOrders = monthOrders.reduce((s, o) => s + o.totalAmount, 0);
+    const revLedger = monthLedger.filter(l => l.type === 'income').reduce((s, l) => s + l.amount, 0);
+    const totalRevMonth = revOrders + revLedger;
+    const modalMonth = monthOrders.reduce((sum, order) =>
+      sum + order.items.reduce((s, item) => {
+        const cost = item.product.costPrice ?? item.product.price * 0.65;
+        return s + cost * item.quantity;
+      }, 0), 0);
+    const opexMonth = monthLedger.filter(l => l.type === 'expense').reduce((s, l) => s + l.amount, 0);
+    const profitMonth = totalRevMonth - modalMonth - opexMonth;
+    const marginMonth = totalRevMonth > 0 ? ((profitMonth / totalRevMonth) * 100).toFixed(1) : '0.0';
+
+    grandRev += totalRevMonth;
+    grandModal += modalMonth;
+    grandOpex += opexMonth;
+    grandProfit += profitMonth;
+
+    plRows.push([
+      monthLabel, revOrders, revLedger, totalRevMonth,
+      modalMonth, opexMonth, profitMonth, `${marginMonth}%`,
+    ]);
+  });
+
+  // Grand Total
+  const grandMargin = grandRev > 0 ? ((grandProfit / grandRev) * 100).toFixed(1) : '0.0';
+  plRows.push([]);
+  plRows.push([
+    'GRAND TOTAL', '', '', grandRev,
+    grandModal, grandOpex, grandProfit, `${grandMargin}%`,
+  ]);
+
+  const wsPL = XLSX.utils.aoa_to_sheet(plRows);
+  wsPL['!cols'] = [
+    { wch: 20 }, { wch: 24 }, { wch: 22 }, { wch: 24 },
+    { wch: 20 }, { wch: 24 }, { wch: 20 }, { wch: 12 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsPL, '📈 Laba Rugi Bulanan');
+
+  // ── Simpan file ────────────────────────────────────────────────────────────
+  const fileName = `Laporan_Keuangan_SeadanyaStore_${periodLabel.replace(/\s/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+};
 
   // ── Derived Financials ─────────────────────────────────────────────────────
   const totalOrderRevenue = filteredOrders.reduce((sum, order) => sum + order.totalAmount, 0);

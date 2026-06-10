@@ -179,6 +179,21 @@ export function Storefront({
 
   const [selectedPayment, setSelectedPayment] = useState<string>('bca');
 
+  const [customerInfo, setCustomerInfo] = useState({
+    name: '',
+    email: '',
+    address: '',
+    shipping: '0',
+  });
+
+  const handleCustomerInfoChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setCustomerInfo(prev => ({ ...prev, [name]: value }));
+    if (name === 'shipping') setShippingCost(Number(value));
+  };
+
   // ── Image Upload ───────────────────────────────────────────────────────────
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     let file = e.target.files?.[0];
@@ -260,8 +275,11 @@ export function Storefront({
         items: [...cart],
         totalAmount: cartTotal + shippingCost,
         status: 'Diproses' as const,
-        customerName: 'Pelanggan Toko (Guest)',
-        paymentMethod: 'Transfer'
+        customerName: customerInfo.name || 'Guest',
+        customerEmail: customerInfo.email,
+        customerAddress: customerInfo.address,
+        shippingMethod: customerInfo.shipping === '0' ? 'Transaksi Langsung' : 'Ekspedisi',
+        paymentMethod: selectedPayment === 'cod' ? 'COD' : selectedPayment.toUpperCase(),
       };
 
       if (setOrders) {
@@ -287,6 +305,7 @@ export function Storefront({
         loyaltyPoints: Math.floor(cartTotal / 10000)
       });
       setCart([]);
+      setCustomerInfo({ name: '', email: '', address: '', shipping: '0' });
       setCheckoutStep(4);
     } else if (checkoutStep === 4) {
        setIsCheckout(false);
@@ -1156,22 +1175,48 @@ export function Storefront({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium mb-1.5 text-apple-500">Nama Lengkap</label>
-                        <input required type="text" className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm" placeholder="Contoh: Budi Santoso" />
+                        <input
+                          required
+                          type="text"
+                          name="name"
+                          value={customerInfo.name}
+                          onChange={handleCustomerInfoChange}
+                          className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm"
+                          placeholder="Contoh: Budi Santoso"
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium mb-1.5 text-apple-500">Email</label>
-                        <input required type="email" className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm" placeholder="budi@example.com" />
+                        <input
+                          required
+                          type="email"
+                          name="email"
+                          value={customerInfo.email}
+                          onChange={handleCustomerInfoChange}
+                          className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm"
+                          placeholder="budi@example.com"
+                        />
                       </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1.5 text-apple-500">Alamat Lengkap</label>
-                      <textarea required rows={3} className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm" placeholder="Nama Jalan, Gedung, No. Rumah..."></textarea>
+                      <textarea
+                        required
+                        rows={3}
+                        name="address"
+                        value={customerInfo.address}
+                        onChange={handleCustomerInfoChange}
+                        className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm"
+                        placeholder="Nama Jalan, Gedung, No. Rumah..."
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1.5 text-apple-500">Opsi Pengiriman</label>
-                      <select 
+                      <select
+                        name="shipping"
+                        value={customerInfo.shipping}
+                        onChange={handleCustomerInfoChange}
                         className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm"
-                        onChange={(e) => setShippingCost(Number(e.target.value))}
                       >
                         <option value="0">Lainnya (Transaksi Langsung Tanpa Ekspedisi)</option>
                         <option value="125000">JNE Reguler, Packing Kayu & Asuransi (Estimasi Rp 125.000)</option>
@@ -1303,7 +1348,11 @@ export function Storefront({
                          <ShieldCheck className="w-8 h-8" />
                        </div>
                        <h3 className="font-bold text-2xl text-black">Pembayaran Berhasil!</h3>
-                       <p className="text-apple-400">Terima kasih atas pesanan Anda.</p>
+                       {completedOrder.customerName !== 'Guest' && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            Atas nama: <span className="font-semibold text-black">{completedOrder.customerName}</span>
+                          </p>
+                        )}
                     </div>
 
                     <div className="bg-white border text-left border-gray-200 rounded-2xl p-6 shadow-sm">
