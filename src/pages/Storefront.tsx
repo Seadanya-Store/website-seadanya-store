@@ -274,7 +274,7 @@ export function Storefront({
         date: new Date().toISOString().split('T')[0],
         items: [...cart],
         totalAmount: cartTotal + shippingCost,
-        status: 'Diproses' as const,
+        status: 'Menunggu Pembayaran' as const,
         customerName: customerInfo.name || 'Guest',
         customerEmail: customerInfo.email,
         customerAddress: customerInfo.address,

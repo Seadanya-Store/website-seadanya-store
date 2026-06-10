@@ -23,7 +23,7 @@ import * as XLSX from 'xlsx';
 
 type ModalMode = 'add' | 'edit' | 'stock';
 type FilterMode = 'all' | 'date' | 'month';
-type OrderStatus = 'Menunggu Pembayaran' | 'Diproses' | 'Dikirim' | 'Selesai';
+type OrderStatus = 'Menunggu Pembayaran' | 'Selesai';
 type LedgerType = 'income' | 'expense';
 
 interface ProductFormData {
@@ -68,8 +68,6 @@ interface AdminDashboardProps {
 
 const ORDER_STATUSES: OrderStatus[] = [
   'Menunggu Pembayaran',
-  'Diproses',
-  'Dikirim',
   'Selesai',
 ];
 
@@ -183,28 +181,14 @@ export function AdminDashboard({
   };
 
   // ── Order Modal ────────────────────────────────────────────────────────────
-  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [orderEditingId, setOrderEditingId] = useState<string | null>(null);
-  const [orderStatusForm, setOrderStatusForm] = useState<OrderStatus>('Menunggu Pembayaran');
-
-  const openOrderModal = (order: Order): void => {
-    setOrderEditingId(order.id);
-    if (isOrderStatus(order.status)) {
-      setOrderStatusForm(order.status);
-    }
-    setIsOrderModalOpen(true);
-  };
-
-  const handleOrderSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
-    e.preventDefault();
-    if (orderEditingId) {
-      setOrders(prev =>
-        prev.map(o =>
-          o.id === orderEditingId ? { ...o, status: orderStatusForm } : o
-        )
-      );
-    }
-    setIsOrderModalOpen(false);
+    const handleToggleOrderStatus = (orderId: string): void => {
+    setOrders(prev =>
+      prev.map(o =>
+        o.id === orderId
+          ? { ...o, status: o.status === 'Selesai' ? 'Menunggu Pembayaran' : 'Selesai' }
+          : o
+      )
+    );
   };
 
   const handleDeleteOrder = (id: string): void => {
@@ -1165,36 +1149,38 @@ export function AdminDashboard({
                           })}
                         </td>
                         <td className="px-6 py-4 text-black">{order.customerName}</td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                              order.status === 'Selesai'
-                                ? 'bg-green-100 text-green-700'
-                                : order.status === 'Menunggu Pembayaran'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}
-                          >
-                            {order.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 font-bold text-black">
-                          Rp {order.totalAmount.toLocaleString('id-ID')}
-                        </td>
-                        <td className="px-6 py-4 text-right space-x-2">
-                          <button
-                            onClick={() => openOrderModal(order)}
-                            className="p-2 text-gray-400 hover:text-[#0066cc] hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteOrder(order.id)}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                order.status === 'Selesai'
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-yellow-100 text-yellow-700'
+                              }`}
+                            >
+                              {order.status === 'Selesai' ? '✅ Selesai' : '⏳ Menunggu Pembayaran'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-black">
+                            Rp {order.totalAmount.toLocaleString('id-ID')}
+                          </td>
+                          <td className="px-6 py-4 text-right space-x-2">
+                            <button
+                              onClick={() => handleToggleOrderStatus(order.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                                order.status === 'Selesai'
+                                  ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                                  : 'bg-green-50 text-green-700 hover:bg-green-100'
+                              }`}
+                            >
+                              {order.status === 'Selesai' ? 'Batalkan' : 'Tandai Selesai'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteOrder(order.id)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1510,50 +1496,6 @@ export function AdminDashboard({
                   </Button>
                   <Button type="submit" className="bg-[#0066cc] text-white">
                     Simpan Transaksi
-                  </Button>
-                </div>
-              </form>
-            </Card>
-          </div>
-        )}
-
-        {/* ── Modal: Order Status ───────────────────────────────────────────── */}
-        {isOrderModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-            <Card className="w-full max-w-lg bg-white shadow-2xl rounded-2xl overflow-hidden animate-in zoom-in-95">
-              <div className="flex justify-between items-center p-6 border-b border-gray-100">
-                <h3 className="text-xl font-bold text-black">Ubah Status Pesanan</h3>
-                <button
-                  onClick={() => setIsOrderModalOpen(false)}
-                  className="text-gray-400 hover:text-black transition cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <form onSubmit={handleOrderSubmit} className="p-6 space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Status</label>
-                  <select
-                    value={orderStatusForm}
-                    onChange={e => {
-                      const val = e.target.value;
-                      if (isOrderStatus(val)) setOrderStatusForm(val);
-                    }}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#0066cc] outline-none text-sm"
-                  >
-                    {ORDER_STATUSES.map(s => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="pt-4 flex justify-end gap-3">
-                  <Button type="button" variant="outline" onClick={() => setIsOrderModalOpen(false)}>
-                    Batal
-                  </Button>
-                  <Button type="submit" className="bg-[#0066cc] text-white">
-                    Simpan Perubahan
                   </Button>
                 </div>
               </form>
