@@ -30,6 +30,7 @@ export interface Order {
   status: 'Menunggu Pembayaran' | 'Diproses' | 'Dikirim' | 'Selesai';
   date: string;
   customerName: string;
+  customerEmail: string;
   paymentMethod: string;
 }
 

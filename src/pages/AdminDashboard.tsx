@@ -3,7 +3,7 @@ import { Package, Users, ShoppingCart, DollarSign, LogOut, Wallet, TrendingUp, T
 import heic2any from 'heic2any';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { mockCustomers, salesData } from '../data/mock';
+import { salesData } from '../data/mock';
 import { APP_CATEGORIES } from '../data/categories';
 import { Product, LedgerEntry, Order, Promotion } from '../types';
 import {
@@ -697,6 +697,14 @@ export function AdminDashboard({
     .reduce((sum, l) => sum + l.amount, 0);
   const netProfit = totalRevenue - totalModal - operationalExpenses;
 
+  const activeCustomers = new Set(
+  filteredOrders.map(o =>
+    (o.customerEmail && o.customerEmail.trim() !== '')
+      ? o.customerEmail.toLowerCase()
+      : o.customerName.toLowerCase()
+  )
+).size;
+
   // ── Tooltip Formatter ──────────────────────────────────────────────────────
   const tooltipFormatter = (value: number | string | undefined): [string, string] => {
   const num = typeof value === 'number' ? value : Number(value ?? 0) || 0;
@@ -821,7 +829,14 @@ export function AdminDashboard({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-black">{mockCustomers.length}</div>
+                  <div className="text-3xl font-bold text-black">{activeCustomers}</div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {filterMode === 'all'
+                      ? 'Semua waktu'
+                      : filterMode === 'month'
+                      ? `Bulan ${filterMonth}`
+                      : `Tanggal ${filterDate}`}
+                  </p>
                 </CardContent>
               </Card>
             </div>
