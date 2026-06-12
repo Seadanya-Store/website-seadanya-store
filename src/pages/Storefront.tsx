@@ -4,7 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Product, Promotion } from '../types';
 import heic2any from 'heic2any';
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 
 interface BuktiPembayaranFormData {
   imageUrl: string;
@@ -14,10 +14,7 @@ const EMPTY_EVIDENCE_FORM: BuktiPembayaranFormData = {
   imageUrl: '',
 };
 
-const openai = new OpenAI({
-  apiKey: "ISI_DENGAN_API_KEY_OPENAI_ANDA",
-  dangerouslyAllowBrowser: true // Diperlukan jika memanggil API langsung dari React/Frontend
-});
+const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY });
 
 export function Storefront({
   products,
@@ -203,14 +200,20 @@ export function Storefront({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const fileToBase64 = (file: File): Promise<string> => {
+  const fileToGenerativePart = (file: File): Promise<{ inlineData: { data: string; mimeType: string } }> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => {
         const base64String = reader.result as string;
-        // Hapus prefix data:image/...;base64, agar menyisakan string base64 murni
-        resolve(base64String.split(',')[1]);
+        // Ambil data base64 murninya saja
+        const base64Data = base64String.split(',')[1];
+        resolve({
+          inlineData: {
+            data: base64Data,
+            mimeType: file.type
+          },
+        });
       };
       reader.onerror = (error) => reject(error);
     });
@@ -225,46 +228,32 @@ export function Storefront({
     setErrorMessage('');
 
     try {
-      // 1. Ubah file gambar ke format base64
-      const base64Image = await fileToBase64(file);
+      // 1. Konversi file gambar ke format Gemini
+      const imagePart = await fileToGenerativePart(file);
 
-      // 2. Kirim ke OpenAI GPT-4o mini untuk dianalisis
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Model tercepat dan termurah untuk analisis gambar
-        messages: [
-          {
-            role: "user",
-            content: [
-              { 
-                type: "text", 
-                text: "Analisis gambar ini. Apakah ini merupakan bukti transfer/nota pembayaran bank resmi dan valid (baik digital maupun cetak struk)? Jawab HANYA dengan satu kata: 'YA' jika benar nota bank, atau 'TIDAK' jika itu gambar lain atau bukan bukti transfer resmi." 
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Image}`,
-                },
-              },
-            ],
-          },
+      // 2. Panggil Gemini 2.5 Flash (Model tercepat dan gratis)
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          'Analisis gambar ini. Apakah ini merupakan bukti transfer, resi, atau nota pembayaran bank resmi (baik digital m-banking maupun cetak struk ATM)? Jawab HANYA dengan satu kata: "YA" jika benar nota bank, atau "TIDAK" jika itu gambar lain yang tidak relevan.',
+          imagePart,
         ],
-        max_tokens: 5,
       });
 
-      const hasilAnalisis = response.choices[0].message.content?.trim().toUpperCase();
+      const hasilAnalisis = response.text?.trim().toUpperCase();
 
-      // 3. Logika Penolakan Gambar
-      if (hasilAnalisis === 'TIDAK') {
+      // 3. Logika Validasi Hasil
+      if (hasilAnalisis?.includes('TIDAK')) {
         setErrorMessage('Gambar ditolak! Foto yang diunggah bukan nota atau bukti pembayaran bank yang valid.');
-        e.target.value = ''; // Reset input file
+        e.target.value = ''; // Reset input file HTML
         setFormData({ ...formData, imageUrl: '' });
       } else {
-        // Jika VALID ('YA'), simpan gambar ke state Anda seperti biasa
+        // Jika lolos (Aki/AI mendeteksi "YA"), simpan gambar ke state Anda
         setFormData({ ...formData, imageUrl: URL.createObjectURL(file) });
       }
 
     } catch (error) {
-      console.error("Gagal memverifikasi gambar dengan AI:", error);
+      console.error("Gagal memverifikasi gambar dengan Gemini:", error);
       setErrorMessage('Gagal memverifikasi gambar. Silakan coba unggah kembali.');
     } finally {
       setIsAnalyzing(false);
