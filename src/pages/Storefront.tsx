@@ -4,7 +4,6 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Product, Promotion } from '../types';
 import heic2any from 'heic2any';
-import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../lib/supabase';
 
 interface BuktiPembayaranFormData {
@@ -14,8 +13,6 @@ interface BuktiPembayaranFormData {
 const EMPTY_EVIDENCE_FORM: BuktiPembayaranFormData = {
   imageUrl: '',
 };
-
-const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY });
 
 export function Storefront({
   products,
@@ -240,66 +237,70 @@ export function Storefront({
     if (name === 'shipping') setShippingCost(Number(value));
   };
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  const fileToGenerativePart = (file: File): Promise<{ inlineData: { data: string; mimeType: string } }> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        const base64String = reader.result as string;
-        // Ambil data base64 murninya saja
-        const base64Data = base64String.split(',')[1];
-        resolve({
-          inlineData: {
-            data: base64Data,
-            mimeType: file.type
-          },
-        });
-      };
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
-  // ── Image Upload ───────────────────────────────────────────────────────────
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    let file = e.target.files?.[0];
     if (!file) return;
 
-    setIsAnalyzing(true);
-    setErrorMessage('');
-
     try {
-      // 1. Konversi file gambar ke format Gemini
-      const imagePart = await fileToGenerativePart(file);
+      const isHeic =
+        file.type === 'image/heic' ||
+        file.type === 'image/heif' ||
+        file.name.toLowerCase().endsWith('.heic') ||
+        file.name.toLowerCase().endsWith('.heif');
 
-      // 2. Panggil Gemini 2.5 Flash (Model tercepat dan gratis)
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          'Analisis gambar ini. Apakah ini merupakan bukti transfer, resi, atau nota pembayaran bank resmi (baik digital m-banking maupun cetak struk ATM)? Jawab HANYA dengan satu kata: "YA" jika benar nota bank, atau "TIDAK" jika itu gambar lain yang tidak relevan.',
-          imagePart,
-        ],
-      });
-
-      const hasilAnalisis = response.text?.trim().toUpperCase();
-
-      // 3. Logika Validasi Hasil
-      if (hasilAnalisis?.includes('TIDAK')) {
-        setErrorMessage('Gambar ditolak! Foto yang diunggah bukan nota atau bukti pembayaran bank yang valid.');
-        e.target.value = ''; // Reset input file HTML
-        setFormData({ ...formData, imageUrl: '' });
-      } else {
-        // Jika lolos (Aki/AI mendeteksi "YA"), simpan gambar ke state Anda
-        setFormData({ ...formData, imageUrl: URL.createObjectURL(file) });
+      if (isHeic) {
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg' });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        file = new File([blob], file.name.replace(/\.heic$/i, '.jpeg'), {
+          type: 'image/jpeg',
+        });
       }
 
-    } catch (error) {
-      console.error("Gagal memverifikasi gambar dengan Gemini:", error);
-      setErrorMessage('Gagal memverifikasi gambar. Silakan coba unggah kembali.');
-    } finally {
-      setIsAnalyzing(false);
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      img.onload = (): void => {
+        const MAX_SIZE = 800;
+        let { width, height } = img;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round(height * (MAX_SIZE / width));
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round(width * (MAX_SIZE / height));
+            height = MAX_SIZE;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          console.error('Could not get 2D canvas context');
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const resizedBase64 = canvas.toDataURL('image/webp', 0.8);
+        setFormData(prev => ({ ...prev, imageUrl: resizedBase64 }));
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      img.onerror = (): void => {
+        console.error('Failed to load image for resizing');
+        URL.revokeObjectURL(objectUrl);
+      };
+
+      img.src = objectUrl;
+    } catch (err) {
+      console.error('Error processing image:', err);
+      alert('Gagal memproses gambar. Pastikan format didukung.');
     }
   };
 
@@ -428,10 +429,9 @@ export function Storefront({
   const handleCheckoutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-      if (checkoutStep === 3 && selectedPayment !== 'cod') {
-      if (isAnalyzing) return; // masih proses verifikasi AI
-      if (!formData.imageUrl || errorMessage) return; // belum upload / ditolak AI
-    }
+      if (checkoutStep === 3 && selectedPayment !== 'cod' && !formData.imageUrl) {
+        return; // belum upload bukti pembayaran
+      }
 
     if (checkoutStep === 1) setCheckoutStep(2);
     else if (checkoutStep === 2) setCheckoutStep(3);
@@ -1521,11 +1521,11 @@ export function Storefront({
                     </div>
 
                     {/* Upload bukti hanya untuk metode non-COD */}
-                    {selectedPayment !== 'cod' && !formData.imageUrl && (
+                    {selectedPayment !== 'cod' && (
                       <div className="flex flex-col items-center gap-4">
                         <label className="text-sm font-medium text-gray-700">Upload Bukti Pembayaran</label>
                         <div className="flex items-center gap-4">
-                          {formData.imageUrl && !isAnalyzing && (
+                          {formData.imageUrl && (
                             <img
                               src={formData.imageUrl}
                               alt="Preview"
@@ -1537,27 +1537,12 @@ export function Storefront({
                             type="file"
                             accept="image/*, .heic, .heif"
                             onChange={handleImageUpload}
-                            disabled={isAnalyzing}
-                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer disabled:opacity-50"
+                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer"
                           />
                         </div>
 
-                        {/* Status Pengecekan AI */}
-                        {isAnalyzing && (
-                          <span className="text-xs text-blue-600 animate-pulse font-medium bg-blue-50 p-2 rounded border border-blue-200">
-                            🔄 AI sedang memverifikasi keaslian nota pembayaran...
-                          </span>
-                        )}
-
-                        {/* Pesan Error Jika Ditolak AI */}
-                        {errorMessage && (
-                          <span className="text-xs text-red-500 font-medium bg-red-50 p-2 rounded border border-red-200 text-center max-w-xs">
-                            {errorMessage}
-                          </span>
-                        )}
-
                         {/* Informasi Wajib Isi */}
-                        {!formData.imageUrl && !errorMessage && !isAnalyzing && (
+                        {!formData.imageUrl && (
                           <span className="text-xs text-red-500 font-medium">
                             * Bukti pembayaran wajib diunggah untuk metode ini
                           </span>
@@ -1671,7 +1656,7 @@ export function Storefront({
                     disabled={
                       checkoutStep === 3 &&
                       selectedPayment !== 'cod' &&
-                      (isAnalyzing || !formData.imageUrl || !!errorMessage)
+                      !formData.imageUrl
                     }
                     className={`px-8 py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-40 disabled:cursor-not-allowed ${checkoutStep === 3 ? "w-full max-w-xs mx-auto" : ""}`}
                   >
