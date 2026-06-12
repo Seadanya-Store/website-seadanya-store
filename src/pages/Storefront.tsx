@@ -5,6 +5,7 @@ import { Card, CardContent } from '../components/ui/Card';
 import { Product, Promotion } from '../types';
 import heic2any from 'heic2any';
 import { GoogleGenAI } from '@google/genai';
+import { supabase } from '../lib/supabase';
 
 interface BuktiPembayaranFormData {
   imageUrl: string;
@@ -189,6 +190,48 @@ export function Storefront({
     shipping: '0',
   });
 
+  interface Testimonial {
+    id: string;
+    name: string;
+    text: string;
+    imageUrl: string;
+    date: string; // ISO string dari Supabase (created_at)
+  }
+
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [isTestimonialModalOpen, setIsTestimonialModalOpen] = useState(false);
+  const [testimonialForm, setTestimonialForm] = useState({ name: '', text: '', imageFile: null as File | null, imageUrl: '' });
+  const [isUploadingTestimonial, setIsUploadingTestimonial] = useState(false);
+  const [isSubmittingTestimonial, setIsSubmittingTestimonial] = useState(false);
+
+  useEffect(() => {
+    const fetchTestimonials = async () => {
+      const { data, error } = await supabase
+        .from('testimonials')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Gagal mengambil testimoni:', error);
+        return;
+      }
+
+      if (data) {
+        setTestimonials(
+          data.map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            text: row.text,
+            imageUrl: row.image_url || '',
+            date: row.created_at,
+          }))
+        );
+      }
+    };
+
+    fetchTestimonials();
+  }, []);
+
   const handleCustomerInfoChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -260,8 +303,136 @@ export function Storefront({
     }
   };
 
+  const handleTestimonialImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingTestimonial(true);
+    try {
+      const isHeic =
+        file.type === 'image/heic' ||
+        file.type === 'image/heif' ||
+        file.name.toLowerCase().endsWith('.heic') ||
+        file.name.toLowerCase().endsWith('.heif');
+
+      if (isHeic) {
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg' });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        file = new File([blob], file.name.replace(/\.heic$/i, '.jpeg'), { type: 'image/jpeg' });
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      img.onload = () => {
+        const MAX_SIZE = 600;
+        let { width, height } = img;
+        if (width > height) {
+          if (width > MAX_SIZE) { height = Math.round(height * (MAX_SIZE / width)); width = MAX_SIZE; }
+        } else {
+          if (height > MAX_SIZE) { width = Math.round(width * (MAX_SIZE / height)); height = MAX_SIZE; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { URL.revokeObjectURL(objectUrl); setIsUploadingTestimonial(false); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (!blob) { setIsUploadingTestimonial(false); return; }
+          const resizedFile = new File([blob], `testimonial-${Date.now()}.webp`, { type: 'image/webp' });
+          setTestimonialForm(prev => ({
+            ...prev,
+            imageFile: resizedFile,
+            imageUrl: URL.createObjectURL(resizedFile), // preview lokal
+          }));
+          URL.revokeObjectURL(objectUrl);
+          setIsUploadingTestimonial(false);
+        }, 'image/webp', 0.8);
+      };
+
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); setIsUploadingTestimonial(false); };
+      img.src = objectUrl;
+    } catch (err) {
+      console.error('Error processing testimonial image:', err);
+      setIsUploadingTestimonial(false);
+    }
+  };
+
+  const handleTestimonialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testimonialForm.name.trim() || !testimonialForm.text.trim()) return;
+
+    setIsSubmittingTestimonial(true);
+
+    try {
+      let publicImageUrl = '';
+
+      // 1. Upload gambar jika ada
+      if (testimonialForm.imageFile) {
+        const fileExt = testimonialForm.imageFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('testimonial-images')
+          .upload(filePath, testimonialForm.imageFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('testimonial-images')
+          .getPublicUrl(filePath);
+
+        publicImageUrl = publicUrlData.publicUrl;
+      }
+
+      // 2. Insert ke tabel testimonials
+      const { data, error: insertError } = await supabase
+        .from('testimonials')
+        .insert({
+          name: testimonialForm.name,
+          text: testimonialForm.text,
+          image_url: publicImageUrl || null,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // 3. Update state lokal — testimoni baru tampil di paling atas
+      if (data) {
+        setTestimonials(prev => [
+          {
+            id: data.id,
+            name: data.name,
+            text: data.text,
+            imageUrl: data.image_url || '',
+            date: data.created_at,
+          },
+          ...prev,
+        ]);
+      }
+
+      setTestimonialForm({ name: '', text: '', imageFile: null, imageUrl: '' });
+      setIsTestimonialModalOpen(false);
+    } catch (err) {
+      console.error('Gagal mengirim testimoni:', err);
+      alert('Gagal mengirim testimoni. Silakan coba lagi.');
+    } finally {
+      setIsSubmittingTestimonial(false);
+    }
+  };
+
   const handleCheckoutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+      if (checkoutStep === 3 && selectedPayment !== 'cod') {
+      if (isAnalyzing) return; // masih proses verifikasi AI
+      if (!formData.imageUrl || errorMessage) return; // belum upload / ditolak AI
+    }
+
     if (checkoutStep === 1) setCheckoutStep(2);
     else if (checkoutStep === 2) setCheckoutStep(3);
     else if (checkoutStep === 3) {
@@ -662,6 +833,46 @@ export function Storefront({
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Testimoni Pelanggan */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-24">
+          <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <h2 className="text-3xl md:text-4xl font-bold text-black tracking-tight">Testimoni Pelanggan</h2>
+            <button
+              onClick={() => setIsTestimonialModalOpen(true)}
+              className="bg-black text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-gray-800 transition shrink-0"
+            >
+              Tulis Testimoni
+            </button>
+          </div>
+
+          {testimonials.length === 0 ? (
+            <div className="text-center text-gray-400 py-12 bg-[#fbfbfd] rounded-2xl">
+              <p>Belum ada testimoni. Jadilah yang pertama!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {testimonials.map(t => (
+                <div key={t.id} className="bg-[#fbfbfd] rounded-2xl p-6 flex flex-col">
+                  {t.imageUrl && (
+                    <img
+                      src={t.imageUrl}
+                      alt={`Testimoni dari ${t.name}`}
+                      className="w-full h-48 object-cover rounded-xl mb-4"
+                    />
+                  )}
+                  <p className="text-gray-700 text-sm leading-relaxed mb-4 flex-1">"{t.text}"</p>
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <span className="font-semibold text-black text-sm">{t.name}</span>
+                    <span className="text-xs text-gray-400">
+                      {new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Promotions Section */}
@@ -1321,14 +1532,17 @@ export function Storefront({
                               className="w-16 h-16 object-cover rounded-lg border border-gray-200"
                             />
                           )}
-                          <input
-                            type="file"
-                            accept="image/*, .heic, .heif"
-                            onChange={handleImageUpload}
-                            disabled={isAnalyzing}
-                            required={!formData.imageUrl}
-                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer disabled:opacity-50"
-                          />
+                          <button
+                            type="submit"
+                            disabled={
+                              checkoutStep === 3 &&
+                              selectedPayment !== 'cod' &&
+                              (isAnalyzing || !formData.imageUrl || !!errorMessage)
+                            }
+                            className={`px-8 py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-40 disabled:cursor-not-allowed ${checkoutStep === 3 ? "w-full max-w-xs mx-auto" : ""}`}
+                          >
+                            {checkoutStep === 3 ? 'Kirim Bukti Pembayaran' : checkoutStep === 4 ? 'Tutup Invoice' : 'Lanjutkan'}
+                          </button>
                         </div>
                         
                         {/* Status Pengecekan AI */}
@@ -1459,6 +1673,79 @@ export function Storefront({
                     {checkoutStep === 3 ? 'Kirim Bukti Pembayaran' : checkoutStep === 4 ? 'Tutup Invoice' : 'Lanjutkan'}
                   </button>
                 </div>
+              </form>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Testimonial Modal */}
+      {isTestimonialModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200 shadow-2xl">
+            <div className="p-6 md:p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-black">Tulis Testimoni</h2>
+                <button onClick={() => setIsTestimonialModalOpen(false)} className="p-2 hover:bg-apple-100 rounded-full transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleTestimonialSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 text-apple-500">Nama Anda</label>
+                  <input
+                    required
+                    type="text"
+                    value={testimonialForm.name}
+                    onChange={(e) => setTestimonialForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm"
+                    placeholder="Contoh: Budi Santoso"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 text-apple-500">Testimoni Anda</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={testimonialForm.text}
+                    onChange={(e) => setTestimonialForm(prev => ({ ...prev, text: e.target.value }))}
+                    className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm"
+                    placeholder="Bagikan pengalaman belanja Anda di Seadanya Store..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5 text-apple-500">Foto (opsional)</label>
+                  <div className="flex items-center gap-4">
+                    {testimonialForm.imageUrl && (
+                      <img
+                        src={testimonialForm.imageUrl}
+                        alt="Preview"
+                        className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                      />
+                    )}
+                    <button
+                      type="submit"
+                      disabled={isUploadingTestimonial || isSubmittingTestimonial}
+                      className="w-full py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50"
+                    >
+                      {isSubmittingTestimonial ? 'Mengirim...' : 'Kirim Testimoni'}
+                    </button>
+                  </div>
+                  {isUploadingTestimonial && (
+                    <span className="text-xs text-blue-600 mt-2 inline-block">Memproses gambar...</span>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isUploadingTestimonial}
+                  className="w-full py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50"
+                >
+                  Kirim Testimoni
+                </button>
               </form>
             </div>
           </Card>
