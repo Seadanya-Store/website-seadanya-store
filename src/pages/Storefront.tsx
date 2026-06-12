@@ -270,10 +270,6 @@ export function Storefront({
     setIsAnalyzing(true);
     setErrorMessage('');
 
-    useEffect(() => {
-      setErrorMessage('');
-    }, [checkoutStep]);
-
     try {
       // 1. Konversi file gambar ke format Gemini
       const imagePart = await fileToGenerativePart(file);
