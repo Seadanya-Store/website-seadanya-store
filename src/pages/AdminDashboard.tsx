@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Package, Users, ShoppingCart, DollarSign, LogOut, Wallet, TrendingUp, TrendingDown, Edit2, Plus, Trash2, X } from 'lucide-react';
 import heic2any from 'heic2any';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { Tag } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { supabase } from '../lib/supabase';
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,6 +36,12 @@ interface ProductFormData {
   discount: string;
   imageUrl: string;
   description: string;
+}
+
+interface Testimonial {
+  id: string;
+  imageUrl: string;
+  date: string;
 }
 
 interface LedgerFormData {
@@ -124,7 +131,7 @@ export function AdminDashboard({
   setPromotions,
   onLogout,
 }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'bookkeeping' | 'promotions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'bookkeeping' | 'promotions' | 'testimonials'>('overview');
 
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -711,7 +718,126 @@ export function AdminDashboard({
   return [`Rp ${num.toLocaleString('id-ID')}`, 'Pendapatan'];
 };
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ── Testimonial State ──────────────────────────────────────────────────────
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [isTestimonialsLoading, setIsTestimonialsLoading] = useState(false);
+  const [isDeletingTestimonial, setIsDeletingTestimonial] = useState<string | null>(null);
+  const [isEditingTestimonial, setIsEditingTestimonial] = useState<string | null>(null);
+
+  // ── Fetch Testimonials ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== 'testimonials') return;
+    const fetchTestimonials = async () => {
+      setIsTestimonialsLoading(true);
+      const { data, error } = await supabase
+        .from('testimonials')
+        .select('id, image_url, created_at')
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        setTestimonials(data.map((row: any) => ({
+          id: row.id,
+          imageUrl: row.image_url || '',
+          date: row.created_at,
+        })));
+      }
+      setIsTestimonialsLoading(false);
+    };
+    fetchTestimonials();
+  }, [activeTab]);
+
+  // ── Delete Testimonial ─────────────────────────────────────────────────────
+  const handleAdminDeleteTestimonial = async (id: string, imageUrl: string) => {
+    if (!window.confirm('Hapus testimoni ini secara permanen?')) return;
+    setIsDeletingTestimonial(id);
+    try {
+      if (imageUrl) {
+        const filePath = imageUrl.split('/testimonial-images/')[1]?.split('?')[0];
+        if (filePath) {
+          await supabase.storage.from('testimonial-images').remove([filePath]);
+        }
+      }
+      const { error } = await supabase.from('testimonials').delete().eq('id', id);
+      if (error) throw error;
+      setTestimonials(prev => prev.filter(t => t.id !== id));
+    } catch (err) {
+      console.error('Gagal menghapus:', err);
+      alert('Gagal menghapus testimoni.');
+    } finally {
+      setIsDeletingTestimonial(null);
+    }
+  };
+
+  // ── Edit/Replace Testimonial Image ─────────────────────────────────────────
+  const handleAdminEditTestimonial = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+    setIsEditingTestimonial(id);
+    try {
+      const isHeic =
+        file.type === 'image/heic' ||
+        file.type === 'image/heif' ||
+        file.name.toLowerCase().endsWith('.heic') ||
+        file.name.toLowerCase().endsWith('.heif');
+
+      if (isHeic) {
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg' });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        file = new File([blob], file.name.replace(/\.heic$/i, '.jpeg'), { type: 'image/jpeg' });
+      }
+
+      const resizedFile = await new Promise<File>((resolve, reject) => {
+        const objectUrl = URL.createObjectURL(file!);
+        const img = new Image();
+        img.onload = () => {
+          const MAX_SIZE = 600;
+          let { width, height } = img;
+          if (width > height) {
+            if (width > MAX_SIZE) { height = Math.round(height * MAX_SIZE / width); width = MAX_SIZE; }
+          } else {
+            if (height > MAX_SIZE) { width = Math.round(width * MAX_SIZE / height); height = MAX_SIZE; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(blob => {
+            URL.revokeObjectURL(objectUrl);
+            if (!blob) return reject(new Error('Blob null'));
+            resolve(new File([blob], `testimonial-${Date.now()}.webp`, { type: 'image/webp' }));
+          }, 'image/webp', 0.8);
+        };
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Load error')); };
+        img.src = objectUrl;
+      });
+
+      const { error: uploadError } = await supabase.storage
+        .from('testimonial-images')
+        .upload(resizedFile.name, resizedFile);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('testimonial-images')
+        .getPublicUrl(resizedFile.name);
+
+      const { error: updateError } = await supabase
+        .from('testimonials')
+        .update({ image_url: urlData.publicUrl })
+        .eq('id', id);
+      if (updateError) throw updateError;
+
+      setTestimonials(prev =>
+        prev.map(t => t.id === id
+          ? { ...t, imageUrl: `${urlData.publicUrl}?t=${Date.now()}` }
+          : t
+        )
+      );
+    } catch (err) {
+      console.error('Gagal mengganti foto:', err);
+      alert('Gagal mengganti foto testimoni.');
+    } finally {
+      setIsEditingTestimonial(null);
+      e.target.value = '';
+    }
+  };
 
   return (
     <div className="flex h-screen bg-[#fbfbfd] text-gray-800 overflow-hidden">
@@ -733,6 +859,7 @@ export function AdminDashboard({
               { tab: 'products', icon: <Package className="w-5 h-5" />, label: 'Produk' },
               { tab: 'orders', icon: <ShoppingCart className="w-5 h-5" />, label: 'Pesanan' },
               { tab: 'promotions', icon: <Tag className="w-5 h-5" />, label: 'Promosi' },
+              { tab: 'testimonials', icon: <Users className="w-5 h-5" />, label: 'Testimoni' },
             ] as const
           ).map(({ tab, icon, label }) => (
             <button
@@ -1279,6 +1406,107 @@ export function AdminDashboard({
                 </table>
               </div>
             </Card>
+          </div>
+        )}
+
+        {/* ── Testimonials ──────────────────────────────────────────────────────── */}
+        {activeTab === 'testimonials' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-semibold tracking-tight text-black">
+                Manajemen Testimoni
+              </h2>
+              <span className="text-sm text-gray-500 bg-white border border-gray-200 px-4 py-2 rounded-xl">
+                {testimonials.length} foto testimoni
+              </span>
+            </div>
+
+            {isTestimonialsLoading ? (
+              <div className="flex items-center justify-center py-24 text-gray-400 text-sm">
+                Memuat testimoni...
+              </div>
+            ) : testimonials.length === 0 ? (
+              <Card>
+                <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+                  <Users className="w-12 h-12 mb-4 opacity-30" />
+                  <p className="text-sm">Belum ada testimoni pelanggan.</p>
+                </div>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {testimonials.map(t => (
+                  <div key={t.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm group relative">
+
+                    {/* Loading overlay saat sedang proses */}
+                    {(isDeletingTestimonial === t.id || isEditingTestimonial === t.id) && (
+                      <div className="absolute inset-0 z-20 bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-6 h-6 border-2 border-[#0066cc] border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs text-gray-500">
+                            {isDeletingTestimonial === t.id ? 'Menghapus...' : 'Mengganti...'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action buttons overlay */}
+                    <div className="absolute top-2 right-2 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      {/* Tombol Ganti Foto */}
+                      <label
+                        className={`w-8 h-8 bg-white/95 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md cursor-pointer hover:bg-[#0066cc] hover:text-white transition-colors group/btn ${isEditingTestimonial === t.id ? 'opacity-50 pointer-events-none' : ''}`}
+                        title="Ganti foto"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-gray-700 group-hover/btn:text-white transition-colors" />
+                        <input
+                          type="file"
+                          accept="image/*, .heic, .heif"
+                          className="hidden"
+                          disabled={isEditingTestimonial === t.id}
+                          onChange={(e) => handleAdminEditTestimonial(t.id, e)}
+                        />
+                      </label>
+
+                      {/* Tombol Hapus */}
+                      <button
+                        className={`w-8 h-8 bg-white/95 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md hover:bg-red-500 transition-colors group/btn ${isDeletingTestimonial === t.id ? 'opacity-50 pointer-events-none' : ''}`}
+                        title="Hapus testimoni"
+                        disabled={isDeletingTestimonial === t.id}
+                        onClick={() => handleAdminDeleteTestimonial(t.id, t.imageUrl)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-gray-700 group-hover/btn:text-white transition-colors" />
+                      </button>
+                    </div>
+
+                    {/* Foto */}
+                    <div className="aspect-[3/4] overflow-hidden bg-gray-50">
+                      {t.imageUrl ? (
+                        <img
+                          src={t.imageUrl}
+                          alt="Testimoni pelanggan"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">
+                          Tidak ada foto
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer card */}
+                    <div className="px-3 py-2.5 border-t border-gray-100 flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">
+                        {new Date(t.date).toLocaleDateString('id-ID', {
+                          day: 'numeric', month: 'short', year: 'numeric'
+                        })}
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-300 truncate max-w-[80px]">
+                        {t.id.slice(0, 8)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
