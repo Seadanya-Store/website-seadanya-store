@@ -270,6 +270,10 @@ export function Storefront({
     setIsAnalyzing(true);
     setErrorMessage('');
 
+    useEffect(() => {
+      setErrorMessage('');
+    }, [checkoutStep]);
+
     try {
       // 1. Konversi file gambar ke format Gemini
       const imagePart = await fileToGenerativePart(file);
@@ -1537,22 +1541,11 @@ export function Storefront({
                             type="file"
                             accept="image/*, .heic, .heif"
                             onChange={handleImageUpload}
+                            disabled={isAnalyzing}
                             className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer disabled:opacity-50"
                           />
-                          
-                          <button
-                            type="submit"
-                            disabled={
-                              checkoutStep === 3 &&
-                              selectedPayment !== 'cod' &&
-                              (isAnalyzing || !formData.imageUrl || !!errorMessage)
-                            }
-                            className={`px-8 py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-40 disabled:cursor-not-allowed ${checkoutStep === 3 ? "w-full max-w-xs mx-auto" : ""}`}
-                          >
-                            {checkoutStep === 3 ? 'Kirim Bukti Pembayaran' : checkoutStep === 4 ? 'Tutup Invoice' : 'Lanjutkan'}
-                          </button>
                         </div>
-                        
+
                         {/* Status Pengecekan AI */}
                         {isAnalyzing && (
                           <span className="text-xs text-blue-600 animate-pulse font-medium bg-blue-50 p-2 rounded border border-blue-200">
@@ -1575,7 +1568,7 @@ export function Storefront({
                         )}
                       </div>
                     )}
-                  </div>
+                    </div>
                 )}
 
                 {checkoutStep === 4 && completedOrder && (
@@ -1677,7 +1670,15 @@ export function Storefront({
                       Kembali
                     </button>
                   ) : <div />}
-                  <button type="submit" className={`px-8 py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition ${checkoutStep === 3 ? "w-full max-w-xs mx-auto" : ""}`}>
+                  <button
+                    type="submit"
+                    disabled={
+                      checkoutStep === 3 &&
+                      selectedPayment !== 'cod' &&
+                      (isAnalyzing || !formData.imageUrl || !!errorMessage)
+                    }
+                    className={`px-8 py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-40 disabled:cursor-not-allowed ${checkoutStep === 3 ? "w-full max-w-xs mx-auto" : ""}`}
+                  >
                     {checkoutStep === 3 ? 'Kirim Bukti Pembayaran' : checkoutStep === 4 ? 'Tutup Invoice' : 'Lanjutkan'}
                   </button>
                 </div>
