@@ -1532,6 +1532,14 @@ export function Storefront({
                               className="w-16 h-16 object-cover rounded-lg border border-gray-200"
                             />
                           )}
+
+                          <input
+                            type="file"
+                            accept="image/*, .heic, .heif"
+                            onChange={handleImageUpload}
+                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer disabled:opacity-50"
+                          />
+                          
                           <button
                             type="submit"
                             disabled={
