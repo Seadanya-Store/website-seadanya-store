@@ -1723,16 +1723,16 @@ export function Storefront({
                       <img
                         src={testimonialForm.imageUrl}
                         alt="Preview"
-                        className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                        className="w-16 h-16 object-cover rounded-lg border border-gray-200 shrink-0"
                       />
                     )}
-                    <button
-                      type="submit"
-                      disabled={isUploadingTestimonial || isSubmittingTestimonial}
-                      className="w-full py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50"
-                    >
-                      {isSubmittingTestimonial ? 'Mengirim...' : 'Kirim Testimoni'}
-                    </button>
+                    <input
+                      type="file"
+                      accept="image/*, .heic, .heif"
+                      onChange={handleTestimonialImageUpload}
+                      disabled={isUploadingTestimonial}
+                      className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer disabled:opacity-50"
+                    />
                   </div>
                   {isUploadingTestimonial && (
                     <span className="text-xs text-blue-600 mt-2 inline-block">Memproses gambar...</span>
@@ -1741,10 +1741,10 @@ export function Storefront({
 
                 <button
                   type="submit"
-                  disabled={isUploadingTestimonial}
+                  disabled={isUploadingTestimonial || isSubmittingTestimonial}
                   className="w-full py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50"
                 >
-                  Kirim Testimoni
+                  {isSubmittingTestimonial ? 'Mengirim...' : 'Kirim Testimoni'}
                 </button>
               </form>
             </div>
