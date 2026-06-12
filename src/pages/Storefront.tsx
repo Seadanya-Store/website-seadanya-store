@@ -827,12 +827,12 @@ export function Storefront({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {testimonials.map(t => (
-                <div key={t.id} className="bg-[#fbfbfd] rounded-2xl overflow-hidden">
+                <div key={t.id} className="bg-[#fbfbfd] rounded-2xl overflow-hidden flex flex-col">
                   {t.imageUrl ? (
                     <img
                       src={t.imageUrl}
                       alt="Testimoni pelanggan"
-                      className="w-full h-64 object-cover"
+                      className="w-full aspect-[3/4] object-cover"
                     />
                   ) : (
                     <div className="w-full h-64 flex items-center justify-center text-gray-300 text-sm">
