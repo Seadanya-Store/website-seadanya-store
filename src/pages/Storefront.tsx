@@ -212,7 +212,7 @@ export function Storefront({
         setTestimonials(
           data.map((row: any) => ({
             id: row.id,
-            imageUrl: row.image_url || '',
+            imageUrl: row.image_url ? `${row.image_url}?t=${Date.now()}` : '',
             date: row.created_at,
           }))
         );
