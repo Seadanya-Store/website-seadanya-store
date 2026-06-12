@@ -189,15 +189,13 @@ export function Storefront({
 
   interface Testimonial {
     id: string;
-    name: string;
-    text: string;
     imageUrl: string;
     date: string; // ISO string dari Supabase (created_at)
   }
 
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [isTestimonialModalOpen, setIsTestimonialModalOpen] = useState(false);
-  const [testimonialForm, setTestimonialForm] = useState({ name: '', text: '', imageFile: null as File | null, imageUrl: '' });
+  const [testimonialForm, setTestimonialForm] = useState({ imageFile: null as File | null, imageUrl: '' });
   const [isUploadingTestimonial, setIsUploadingTestimonial] = useState(false);
   const [isSubmittingTestimonial, setIsSubmittingTestimonial] = useState(false);
 
@@ -205,20 +203,15 @@ export function Storefront({
     const fetchTestimonials = async () => {
       const { data, error } = await supabase
         .from('testimonials')
-        .select('*')
+        .select('id, image_url, created_at')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Gagal mengambil testimoni:', error);
-        return;
-      }
+      if (error) { console.error('Gagal mengambil testimoni:', error); return; }
 
       if (data) {
         setTestimonials(
           data.map((row: any) => ({
             id: row.id,
-            name: row.name,
-            text: row.text,
             imageUrl: row.image_url || '',
             date: row.created_at,
           }))
@@ -363,60 +356,40 @@ export function Storefront({
 
   const handleTestimonialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!testimonialForm.name.trim() || !testimonialForm.text.trim()) return;
+    if (!testimonialForm.imageFile) return;
 
     setIsSubmittingTestimonial(true);
 
     try {
-      let publicImageUrl = '';
+      const fileExt = testimonialForm.imageFile.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
 
-      // 1. Upload gambar jika ada
-      if (testimonialForm.imageFile) {
-        const fileExt = testimonialForm.imageFile.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-        const filePath = `${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from('testimonial-images')
+        .upload(fileName, testimonialForm.imageFile);
 
-        const { error: uploadError } = await supabase.storage
-          .from('testimonial-images')
-          .upload(filePath, testimonialForm.imageFile);
+      if (uploadError) throw uploadError;
 
-        if (uploadError) throw uploadError;
+      const { data: publicUrlData } = supabase.storage
+        .from('testimonial-images')
+        .getPublicUrl(fileName);
 
-        const { data: publicUrlData } = supabase.storage
-          .from('testimonial-images')
-          .getPublicUrl(filePath);
-
-        publicImageUrl = publicUrlData.publicUrl;
-      }
-
-      // 2. Insert ke tabel testimonials
       const { data, error: insertError } = await supabase
         .from('testimonials')
-        .insert({
-          name: testimonialForm.name,
-          text: testimonialForm.text,
-          image_url: publicImageUrl || null,
-        })
+        .insert({ image_url: publicUrlData.publicUrl })
         .select()
         .single();
 
       if (insertError) throw insertError;
 
-      // 3. Update state lokal — testimoni baru tampil di paling atas
       if (data) {
         setTestimonials(prev => [
-          {
-            id: data.id,
-            name: data.name,
-            text: data.text,
-            imageUrl: data.image_url || '',
-            date: data.created_at,
-          },
+          { id: data.id, imageUrl: data.image_url || '', date: data.created_at },
           ...prev,
         ]);
       }
 
-      setTestimonialForm({ name: '', text: '', imageFile: null, imageUrl: '' });
+      setTestimonialForm({ imageFile: null, imageUrl: '' });
       setIsTestimonialModalOpen(false);
     } catch (err) {
       console.error('Gagal mengirim testimoni:', err);
@@ -854,17 +827,19 @@ export function Storefront({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {testimonials.map(t => (
-                <div key={t.id} className="bg-[#fbfbfd] rounded-2xl p-6 flex flex-col">
-                  {t.imageUrl && (
+                <div key={t.id} className="bg-[#fbfbfd] rounded-2xl overflow-hidden">
+                  {t.imageUrl ? (
                     <img
                       src={t.imageUrl}
-                      alt={`Testimoni dari ${t.name}`}
-                      className="w-full h-48 object-cover rounded-xl mb-4"
+                      alt="Testimoni pelanggan"
+                      className="w-full h-64 object-cover"
                     />
+                  ) : (
+                    <div className="w-full h-64 flex items-center justify-center text-gray-300 text-sm">
+                      Tidak ada foto
+                    </div>
                   )}
-                  <p className="text-gray-700 text-sm leading-relaxed mb-4 flex-1">"{t.text}"</p>
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                    <span className="font-semibold text-black text-sm">{t.name}</span>
+                  <div className="px-4 py-3 border-t border-gray-100">
                     <span className="text-xs text-gray-400">
                       {new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
@@ -1682,9 +1657,8 @@ export function Storefront({
               </div>
 
               <form onSubmit={handleTestimonialSubmit} className="space-y-4">
-
                 <div>
-                  <label className="block text-sm font-medium mb-1.5 text-apple-500">Foto (opsional)</label>
+                  <label className="block text-sm font-medium mb-1.5 text-apple-500">Foto Testimoni</label>
                   <div className="flex items-center gap-4">
                     {testimonialForm.imageUrl && (
                       <img
@@ -1709,10 +1683,10 @@ export function Storefront({
 
                 <button
                   type="submit"
-                  disabled={isUploadingTestimonial || isSubmittingTestimonial}
+                  disabled={isUploadingTestimonial || isSubmittingTestimonial || !testimonialForm.imageFile}
                   className="w-full py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50"
                 >
-                  {isSubmittingTestimonial ? 'Mengirim...' : 'Kirim Testimoni'}
+                  {isSubmittingTestimonial ? 'Mengirim...' : 'Kirim Foto'}
                 </button>
               </form>
             </div>
