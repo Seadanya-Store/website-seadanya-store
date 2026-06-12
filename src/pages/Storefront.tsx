@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Product, Promotion } from '../types';
 import heic2any from 'heic2any';
+import OpenAI from 'openai';
 
 interface BuktiPembayaranFormData {
   imageUrl: string;
@@ -12,6 +13,11 @@ interface BuktiPembayaranFormData {
 const EMPTY_EVIDENCE_FORM: BuktiPembayaranFormData = {
   imageUrl: '',
 };
+
+const openai = new OpenAI({
+  apiKey: "ISI_DENGAN_API_KEY_OPENAI_ANDA",
+  dangerouslyAllowBrowser: true // Diperlukan jika memanggil API langsung dari React/Frontend
+});
 
 export function Storefront({
   products,
@@ -194,72 +200,74 @@ export function Storefront({
     if (name === 'shipping') setShippingCost(Number(value));
   };
 
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const base64String = reader.result as string;
+        // Hapus prefix data:image/...;base64, agar menyisakan string base64 murni
+        resolve(base64String.split(',')[1]);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   // ── Image Upload ───────────────────────────────────────────────────────────
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
-    let file = e.target.files?.[0];
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
-    try {
-      const isHeic =
-        file.type === 'image/heic' ||
-        file.type === 'image/heif' ||
-        file.name.toLowerCase().endsWith('.heic') ||
-        file.name.toLowerCase().endsWith('.heif');
+    setIsAnalyzing(true);
+    setErrorMessage('');
 
-      if (isHeic) {
-        // heic2any can return Blob or Blob[] depending on the source
-        const converted = await heic2any({ blob: file, toType: 'image/jpeg' });
-        const blob = Array.isArray(converted) ? converted[0] : converted;
-        file = new File([blob], file.name.replace(/\.heic$/i, '.jpeg'), {
-          type: 'image/jpeg',
-        });
+    try {
+      // 1. Ubah file gambar ke format base64
+      const base64Image = await fileToBase64(file);
+
+      // 2. Kirim ke OpenAI GPT-4o mini untuk dianalisis
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini", // Model tercepat dan termurah untuk analisis gambar
+        messages: [
+          {
+            role: "user",
+            content: [
+              { 
+                type: "text", 
+                text: "Analisis gambar ini. Apakah ini merupakan bukti transfer/nota pembayaran bank resmi dan valid (baik digital maupun cetak struk)? Jawab HANYA dengan satu kata: 'YA' jika benar nota bank, atau 'TIDAK' jika itu gambar lain atau bukan bukti transfer resmi." 
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64Image}`,
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 5,
+      });
+
+      const hasilAnalisis = response.choices[0].message.content?.trim().toUpperCase();
+
+      // 3. Logika Penolakan Gambar
+      if (hasilAnalisis === 'TIDAK') {
+        setErrorMessage('Gambar ditolak! Foto yang diunggah bukan nota atau bukti pembayaran bank yang valid.');
+        e.target.value = ''; // Reset input file
+        setFormData({ ...formData, imageUrl: '' });
+      } else {
+        // Jika VALID ('YA'), simpan gambar ke state Anda seperti biasa
+        setFormData({ ...formData, imageUrl: URL.createObjectURL(file) });
       }
 
-      const objectUrl = URL.createObjectURL(file);
-      const img = new Image();
-
-      img.onload = (): void => {
-        const MAX_SIZE = 800;
-        let { width, height } = img;
-
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height = Math.round(height * (MAX_SIZE / width));
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width = Math.round(width * (MAX_SIZE / height));
-            height = MAX_SIZE;
-          }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          console.error('Could not get 2D canvas context');
-          URL.revokeObjectURL(objectUrl);
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, width, height);
-        const resizedBase64 = canvas.toDataURL('image/webp', 0.8);
-        setFormData(prev => ({ ...prev, imageUrl: resizedBase64 }));
-        URL.revokeObjectURL(objectUrl);
-      };
-
-      img.onerror = (): void => {
-        console.error('Failed to load image for resizing');
-        URL.revokeObjectURL(objectUrl);
-      };
-
-      img.src = objectUrl;
-    } catch (err) {
-      console.error('Error processing image:', err);
-      alert('Gagal memproses gambar. Pastikan format didukung.');
+    } catch (error) {
+      console.error("Gagal memverifikasi gambar dengan AI:", error);
+      setErrorMessage('Gagal memverifikasi gambar. Silakan coba unggah kembali.');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -474,7 +482,6 @@ export function Storefront({
 
       {/* Main Content */}
       <main className="pb-24">
-        {/* Premium Product Banner */}
         {/* Auto-Sliding Hero Banner */}
         <div className="bg-[#0a0a0a] text-white relative overflow-hidden" style={{ minHeight: '420px' }}>
           {/* Slide Track */}
@@ -482,7 +489,7 @@ export function Storefront({
             className="flex transition-transform duration-700 ease-in-out h-full"
             style={{ transform: `translateX(-${heroIndex * 100}%)` }}
           >
-            {heroProducts.map((product, idx) => (
+            {heroProducts.map((product) => (
               <div
                 key={product.id}
                 className="min-w-full flex flex-col md:flex-row items-center justify-between px-6 py-12 md:py-24 relative"
@@ -653,7 +660,7 @@ export function Storefront({
               <div className="text-5xl md:text-6xl grayscale opacity-80" role="img" aria-label="Wrench">🔧</div>
               <div className="flex-1">
                 <h2 className="text-2xl md:text-3xl font-bold text-white mb-3 tracking-tight">Servis Ahli. Kapan Saja.</h2>
-                <p className="text-gray-400 max-w-md text-sm md:text-base leading-relaxed">Layanan perbaikan profesional untuk semua perangkat Apple dan Android Anda. Ganti LCD, baterai, software, cepat dan bergaransi.</p>
+                <p className="text-gray-400 max-w-md text-sm md:text-base leading-relaxed">Layanan perbaikan profesional untuk semua perangkat Apple and Android Anda. Ganti LCD, baterai, software, cepat dan bergaransi.</p>
               </div>
             </div>
             
@@ -727,7 +734,7 @@ export function Storefront({
                  key={cat}
                  onClick={() => setSelectedCategory(cat)}
                  className={`shrink-0 px-5 py-2 rounded-full text-sm font-semibold transition-colors snap-start ${
-                   selectedCategory === cat ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    selectedCategory === cat ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                  }`}
                >
                  {cat}
@@ -881,7 +888,7 @@ export function Storefront({
                   Solusi Pintar untuk Siklus Hidup Gadget Anda.
                 </p>
                 <p className="text-base text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                  Di Seadanya Store, kami percaya bahwa teknologi hebat tidak harus selalu mahal atau merusak lingkungan. 
+                  Di Seadanya Store, kami believe bahwa teknologi hebat tidak harus selalu mahal atau merusak lingkungan. 
                   Kami hadir sebagai mitra terpercaya yang siap melayani segala kebutuhan gadget Anda—mulai dari tukar tambah, 
                   penjualan unit bekas berkualitas, hingga servis profesional. Kami berkomitmen menciptakan ekosistem gadget yang 
                   berkelanjutan agar teknologi tetap dapat dinikmati secara maksimal oleh siapa saja.
@@ -996,13 +1003,12 @@ export function Storefront({
                 <div className="text-center text-apple-400 mt-20">
                   <Heart className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>Wishlist Anda masih kosong.</p>
-                  <Button 
-                    variant="ghost" 
-                    className="mt-4 text-apple-blue"
+                  <button 
+                    className="mt-4 text-apple-blue text-sm hover:underline"
                     onClick={() => setIsWishlistOpen(false)}
                   >
                     Simpan produk favorit Anda di sini
-                  </Button>
+                  </button>
                 </div>
               ) : (
                 wishlist.map(product => (
@@ -1018,14 +1024,12 @@ export function Storefront({
                       <h4 className="font-medium text-black line-clamp-1">{product.title}</h4>
                       <p className="text-sm text-apple-400 mb-2">Rp {product.price.toLocaleString('id-ID')}</p>
                       <div className="flex items-center gap-2 mt-auto">
-                        <Button 
-                          size="sm" 
-                          variant="secondary" 
-                          className="flex-1 h-8 text-xs font-medium"
+                        <button 
+                          className="flex-1 h-8 text-xs font-medium bg-gray-100 text-black rounded-lg hover:bg-gray-200 transition"
                           onClick={() => moveWishlistToCart(product)}
                         >
                           Pindahkan ke Keranjang
-                        </Button>
+                        </button>
                         <button 
                           className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition" 
                           onClick={() => removeFromWishlist(product.id)}
@@ -1062,13 +1066,12 @@ export function Storefront({
                 <div className="text-center text-apple-400 mt-20">
                   <ShoppingBag className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>Keranjang belanja masih kosong.</p>
-                  <Button 
-                    variant="ghost" 
-                    className="mt-4"
+                  <button 
+                    className="mt-4 text-apple-blue text-sm hover:underline"
                     onClick={() => setIsCartOpen(false)}
                   >
                     Mulai Belanja
-                  </Button>
+                  </button>
                 </div>
               ) : (
                 cart.map(item => (
@@ -1134,15 +1137,15 @@ export function Storefront({
                     <span>Rp {cartTotal.toLocaleString('id-ID')}</span>
                   </div>
                 </div>
-                <Button 
-                  className="w-full py-6 text-lg rounded-2xl shadow-md" 
+                <button 
+                  className="w-full py-4 text-white bg-black hover:bg-gray-800 font-semibold text-lg rounded-2xl shadow-md flex items-center justify-center gap-2 transition" 
                   onClick={() => {
                     setIsCartOpen(false);
                     setIsCheckout(true);
                   }}
                 >
-                  Checkout Sekarang <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
+                  Checkout Sekarang <ArrowRight className="w-5 h-5" />
+                </button>
               </div>
             )}
           </div>
@@ -1318,11 +1321,11 @@ export function Storefront({
                     </div>
 
                     {/* Upload bukti hanya untuk metode non-COD */}
-                    {selectedPayment !== 'cod' && !formData.imageUrl && (
+                    {selectedPayment !== 'cod' && (
                       <div className="flex flex-col items-center gap-4">
                         <label className="text-sm font-medium text-gray-700">Upload Bukti Pembayaran</label>
                         <div className="flex items-center gap-4">
-                          {formData.imageUrl && (
+                          {formData.imageUrl && !isAnalyzing && (
                             <img
                               src={formData.imageUrl}
                               alt="Preview"
@@ -1333,10 +1336,31 @@ export function Storefront({
                             type="file"
                             accept="image/*, .heic, .heif"
                             onChange={handleImageUpload}
-                            required={!formData.imageUrl}
-                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer"
+                            disabled={isAnalyzing}
+                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer disabled:opacity-50"
                           />
                         </div>
+                        
+                        {/* Status Pengecekan AI */}
+                        {isAnalyzing && (
+                          <span className="text-xs text-blue-600 animate-pulse font-medium bg-blue-50 p-2 rounded border border-blue-200">
+                            🔄 AI sedang memverifikasi keaslian nota pembayaran...
+                          </span>
+                        )}
+
+                        {/* Pesan Error Jika Ditolak AI */}
+                        {errorMessage && (
+                          <span className="text-xs text-red-500 font-medium bg-red-50 p-2 rounded border border-red-200 text-center max-w-xs">
+                            {errorMessage}
+                          </span>
+                        )}
+
+                        {/* Informasi Wajib Isi */}
+                        {!formData.imageUrl && !errorMessage && !isAnalyzing && (
+                          <span className="text-xs text-red-500 font-medium">
+                            * Bukti pembayaran wajib diunggah untuk metode ini
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1436,12 +1460,14 @@ export function Storefront({
                 )}
 
                 <div className="flex justify-between mt-8 pt-6 border-t border-apple-100">
-                  {checkoutStep > 1 && checkoutStep < 4 ? (
-                    <Button type="button" variant="ghost" onClick={() => setCheckoutStep(s => s - 1)}>Kembali</Button>
+                  {[2, 3].includes(checkoutStep) ? (
+                    <button type="button" className="px-4 py-2 border rounded-xl hover:bg-gray-50 text-sm" onClick={() => setCheckoutStep(s => s - 1)}>
+                      Kembali
+                    </button>
                   ) : <div />}
-                  <Button type="submit" size="lg" className={checkoutStep === 3 ? "w-full max-w-xs mx-auto" : "px-8"}>
+                  <button type="submit" className={`px-8 py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition ${checkoutStep === 3 ? "w-full max-w-xs mx-auto" : ""}`}>
                     {checkoutStep === 3 ? 'Kirim Bukti Pembayaran' : checkoutStep === 4 ? 'Tutup Invoice' : 'Lanjutkan'}
-                  </Button>
+                  </button>
                 </div>
               </form>
             </div>
