@@ -1682,29 +1682,6 @@ export function Storefront({
               </div>
 
               <form onSubmit={handleTestimonialSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5 text-apple-500">Nama Anda</label>
-                  <input
-                    required
-                    type="text"
-                    value={testimonialForm.name}
-                    onChange={(e) => setTestimonialForm(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm"
-                    placeholder="Contoh: Budi Santoso"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1.5 text-apple-500">Testimoni Anda</label>
-                  <textarea
-                    required
-                    rows={4}
-                    value={testimonialForm.text}
-                    onChange={(e) => setTestimonialForm(prev => ({ ...prev, text: e.target.value }))}
-                    className="w-full p-3 bg-white border border-apple-200 rounded-xl focus:ring-2 focus:ring-apple-blue focus:border-transparent outline-none transition shadow-sm"
-                    placeholder="Bagikan pengalaman belanja Anda di Seadanya Store..."
-                  />
-                </div>
 
                 <div>
                   <label className="block text-sm font-medium mb-1.5 text-apple-500">Foto (opsional)</label>
@@ -1717,6 +1694,7 @@ export function Storefront({
                       />
                     )}
                     <input
+                      required
                       type="file"
                       accept="image/*, .heic, .heif"
                       onChange={handleTestimonialImageUpload}
