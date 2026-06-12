@@ -1310,7 +1310,7 @@ export function Storefront({
                     </div>
 
                     {/* Upload bukti hanya untuk metode non-COD */}
-                    {selectedPayment !== 'cod' && (
+                    {selectedPayment !== 'cod' && !formData.imageUrl && (
                       <div className="flex flex-col items-center gap-4">
                         <label className="text-sm font-medium text-gray-700">Upload Bukti Pembayaran</label>
                         <div className="flex items-center gap-4">
@@ -1326,6 +1326,7 @@ export function Storefront({
                             accept="image/*, .heic, .heif"
                             onChange={handleImageUpload}
                             disabled={isAnalyzing}
+                            required={!formData.imageUrl}
                             className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer disabled:opacity-50"
                           />
                         </div>
