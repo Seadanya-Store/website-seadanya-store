@@ -5,6 +5,7 @@ import { Card, CardContent } from '../components/ui/Card';
 import { Product, Promotion } from '../types';
 import heic2any from 'heic2any';
 import { supabase } from '../lib/supabase';
+import { askGemini } from '../lib/gemini';
 
 interface BuktiPembayaranFormData {
   imageUrl: string;
@@ -43,7 +44,7 @@ export function Storefront({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [chatMessages, setChatMessages] = useState<{sender: 'user' | 'seller', text: string}[]>([
-    { sender: 'seller', text: 'Halo! Ada yang bisa kami bantu hari ini? 😊' }
+    { sender: 'seller', text: 'Halo Kak! 👋 Saya Sea, asisten Seadanya Store. Ada yang bisa saya bantu hari ini? Tanya soal produk, harga, servis, atau trade-in 😊' }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -116,15 +117,33 @@ export function Storefront({
     setIsMobileMenuOpen(false);
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const [isAiTyping, setIsAiTyping] = useState(false);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
-    setChatMessages([...chatMessages, { sender: 'user', text: chatInput }]);
+    const text = chatInput.trim();
+    if (!text || isAiTyping) return;
+
+    const newHistory = [...chatMessages, { sender: 'user' as const, text }];
+    setChatMessages(newHistory);
     setChatInput('');
-    // Simulate seller response
-    setTimeout(() => {
-      setChatMessages(prev => [...prev, { sender: 'seller', text: 'Baik kak, pesan sudah kami terima. Akan segera kami proses pertanyaannya.' }]);
-    }, 1000);
+    setIsAiTyping(true);
+
+    try {
+      const reply = await askGemini(chatMessages, text, products);
+      setChatMessages(prev => [...prev, { sender: 'seller', text: reply }]);
+    } catch (err) {
+      console.error('Gemini error:', err);
+      setChatMessages(prev => [
+        ...prev,
+        {
+          sender: 'seller',
+          text: 'Maaf Kak, koneksi sedang bermasalah. Silakan hubungi kami via WhatsApp di 085861969844 🙏',
+        },
+      ]);
+    } finally {
+      setIsAiTyping(false);
+    }
   };
 
   const addToCart = (product: Product) => {
@@ -1554,6 +1573,15 @@ export function Storefront({
                   </div>
                 </div>
               ))}
+              {isAiTyping && (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] rounded-2xl px-4 py-2 text-sm bg-white border border-gray-100 text-gray-500 rounded-bl-none shadow-sm flex items-center gap-1">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-gray-100 flex items-center gap-2">
@@ -1566,7 +1594,7 @@ export function Storefront({
               />
               <button 
                 type="submit"
-                disabled={!chatInput.trim()}
+                disabled={!chatInput.trim() || isAiTyping}
                 className="bg-[#0066cc] text-white p-2 rounded-full disabled:opacity-50 transition"
               >
                 <Send className="w-4 h-4" />
