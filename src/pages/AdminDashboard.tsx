@@ -750,18 +750,29 @@ export function AdminDashboard({
     if (!window.confirm('Hapus testimoni ini secara permanen?')) return;
     setIsDeletingTestimonial(id);
     try {
+      const { data, error } = await supabase
+        .from('testimonials')
+        .delete()
+        .eq('id', id)
+        .select(); // <- penting: agar tahu berapa baris yang benar2 terhapus
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Tidak ada baris yang terhapus (kemungkinan diblokir RLS).');
+      }
+
+      // Hapus file storage SETELAH row DB berhasil dihapus
       if (imageUrl) {
         const filePath = imageUrl.split('/testimonial-images/')[1]?.split('?')[0];
         if (filePath) {
           await supabase.storage.from('testimonial-images').remove([filePath]);
         }
       }
-      const { error } = await supabase.from('testimonials').delete().eq('id', id);
-      if (error) throw error;
+
       setTestimonials(prev => prev.filter(t => t.id !== id));
     } catch (err) {
       console.error('Gagal menghapus:', err);
-      alert('Gagal menghapus testimoni.');
+      alert('Gagal menghapus testimoni. ' + (err instanceof Error ? err.message : ''));
     } finally {
       setIsDeletingTestimonial(null);
     }
@@ -818,11 +829,16 @@ export function AdminDashboard({
         .from('testimonial-images')
         .getPublicUrl(resizedFile.name);
 
-      const { error: updateError } = await supabase
+      const { data: updateData, error: updateError } = await supabase
         .from('testimonials')
         .update({ image_url: urlData.publicUrl })
-        .eq('id', id);
+        .eq('id', id)
+        .select();
+
       if (updateError) throw updateError;
+      if (!updateData || updateData.length === 0) {
+        throw new Error('Update gagal — kemungkinan diblokir RLS.');
+      }
 
       setTestimonials(prev =>
         prev.map(t => t.id === id
