@@ -1,9 +1,6 @@
-import { GoogleGenAI } from '@google/genai';
 import type { Product } from '../types';
 
-const ai = new GoogleGenAI({
-  apiKey: import.meta.env.VITE_GEMINI_API_KEY as string,
-});
+const FUNCTION_URL = 'https://ofumlhqoosquhjfewynw.supabase.co/functions/v1/gemini-proxy';
 
 const buildSystemInstruction = (products: Product[]): string => {
   const productList = products
@@ -21,7 +18,8 @@ const buildSystemInstruction = (products: Product[]): string => {
     'PERAN & GAYA BICARA:\n' +
     '- Selalu jawab dalam Bahasa Indonesia yang ramah, sopan, dan profesional.\n' +
     '- Gunakan sapaan "Kak" kepada pelanggan.\n' +
-    '- Singkat, padat, jelas (maks 3-4 kalimat per balasan kecuali diminta detail).\n\n' +
+    '- Singkat, padat, jelas (maks 3-4 kalimat per balasan kecuali diminta detail).\n' +
+    '- Jangan gunakan markdown berlebihan, cukup gunakan emoji secukupnya.\n\n' +
     'LAYANAN YANG KAMI TAWARKAN:\n' +
     '1. Trade-In Center - Tukar tambah gadget lama jadi baru.\n' +
     '2. Buy-Back Program - Kami membeli gadget bekas Anda dengan harga kompetitif.\n' +
@@ -56,15 +54,28 @@ export async function askGemini(
     { role: 'user', parts: [{ text: userMessage }] },
   ];
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents,
-    config: {
-      systemInstruction: buildSystemInstruction(products),
-      temperature: 0.7,
-      maxOutputTokens: 400,
-    },
+  const response = await fetch(FUNCTION_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: {
+        parts: [{ text: buildSystemInstruction(products) }],
+      },
+      contents,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 400,
+      },
+    }),
   });
 
-  return response.text ?? 'Maaf Kak, saya sedang kesulitan menjawab. Coba lagi ya 🙏';
+  if (!response.ok) {
+    throw new Error(`Function error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return (
+    data?.candidates?.[0]?.content?.parts?.[0]?.text ??
+    'Maaf Kak, saya sedang kesulitan menjawab. Coba lagi ya 🙏'
+  );
 }
