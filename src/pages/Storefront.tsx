@@ -678,9 +678,11 @@ export function Storefront({
         </div>
 
         {/* Testimoni Pelanggan */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-24">
           <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
             <h2 className="text-3xl md:text-4xl font-bold text-black tracking-tight">Testimoni Pelanggan</h2>
           </div>
+        </div>
 
         {/* Promotions Section */}
         {promotions.filter(p => p.isActive).length > 0 && (
