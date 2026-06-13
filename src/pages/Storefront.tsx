@@ -193,35 +193,6 @@ export function Storefront({
     date: string; // ISO string dari Supabase (created_at)
   }
 
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [isTestimonialModalOpen, setIsTestimonialModalOpen] = useState(false);
-  const [testimonialForm, setTestimonialForm] = useState({ imageFile: null as File | null, imageUrl: '' });
-  const [isUploadingTestimonial, setIsUploadingTestimonial] = useState(false);
-  const [isSubmittingTestimonial, setIsSubmittingTestimonial] = useState(false);
-
-  useEffect(() => {
-    const fetchTestimonials = async () => {
-      const { data, error } = await supabase
-        .from('testimonials')
-        .select('id, image_url, created_at')
-        .order('created_at', { ascending: false });
-
-      if (error) { console.error('Gagal mengambil testimoni:', error); return; }
-
-      if (data) {
-        setTestimonials(
-          data.map((row: any) => ({
-            id: row.id,
-            imageUrl: row.image_url ? `${row.image_url}?t=${Date.now()}` : '',
-            date: row.created_at,
-          }))
-        );
-      }
-    };
-
-    fetchTestimonials();
-  }, []);
-
   const handleCustomerInfoChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -294,108 +265,6 @@ export function Storefront({
     } catch (err) {
       console.error('Error processing image:', err);
       alert('Gagal memproses gambar. Pastikan format didukung.');
-    }
-  };
-
-  const handleTestimonialImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    let file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingTestimonial(true);
-    try {
-      const isHeic =
-        file.type === 'image/heic' ||
-        file.type === 'image/heif' ||
-        file.name.toLowerCase().endsWith('.heic') ||
-        file.name.toLowerCase().endsWith('.heif');
-
-      if (isHeic) {
-        const converted = await heic2any({ blob: file, toType: 'image/jpeg' });
-        const blob = Array.isArray(converted) ? converted[0] : converted;
-        file = new File([blob], file.name.replace(/\.heic$/i, '.jpeg'), { type: 'image/jpeg' });
-      }
-
-      const objectUrl = URL.createObjectURL(file);
-      const img = new Image();
-
-      img.onload = () => {
-        const MAX_SIZE = 600;
-        let { width, height } = img;
-        if (width > height) {
-          if (width > MAX_SIZE) { height = Math.round(height * (MAX_SIZE / width)); width = MAX_SIZE; }
-        } else {
-          if (height > MAX_SIZE) { width = Math.round(width * (MAX_SIZE / height)); height = MAX_SIZE; }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { URL.revokeObjectURL(objectUrl); setIsUploadingTestimonial(false); return; }
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob((blob) => {
-          if (!blob) { setIsUploadingTestimonial(false); return; }
-          const resizedFile = new File([blob], `testimonial-${Date.now()}.webp`, { type: 'image/webp' });
-          setTestimonialForm(prev => ({
-            ...prev,
-            imageFile: resizedFile,
-            imageUrl: URL.createObjectURL(resizedFile), // preview lokal
-          }));
-          URL.revokeObjectURL(objectUrl);
-          setIsUploadingTestimonial(false);
-        }, 'image/webp', 0.8);
-      };
-
-      img.onerror = () => { URL.revokeObjectURL(objectUrl); setIsUploadingTestimonial(false); };
-      img.src = objectUrl;
-    } catch (err) {
-      console.error('Error processing testimonial image:', err);
-      setIsUploadingTestimonial(false);
-    }
-  };
-
-  const handleTestimonialSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!testimonialForm.imageFile) return;
-
-    setIsSubmittingTestimonial(true);
-
-    try {
-      const fileExt = testimonialForm.imageFile.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('testimonial-images')
-        .upload(fileName, testimonialForm.imageFile);
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage
-        .from('testimonial-images')
-        .getPublicUrl(fileName);
-
-      const { data, error: insertError } = await supabase
-        .from('testimonials')
-        .insert({ image_url: publicUrlData.publicUrl })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      if (data) {
-        setTestimonials(prev => [
-          { id: data.id, imageUrl: data.image_url || '', date: data.created_at },
-          ...prev,
-        ]);
-      }
-
-      setTestimonialForm({ imageFile: null, imageUrl: '' });
-      setIsTestimonialModalOpen(false);
-    } catch (err) {
-      console.error('Gagal mengirim testimoni:', err);
-      alert('Gagal mengirim testimoni. Silakan coba lagi.');
-    } finally {
-      setIsSubmittingTestimonial(false);
     }
   };
 
@@ -809,46 +678,9 @@ export function Storefront({
         </div>
 
         {/* Testimoni Pelanggan */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-24">
           <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
             <h2 className="text-3xl md:text-4xl font-bold text-black tracking-tight">Testimoni Pelanggan</h2>
-            <button
-              onClick={() => setIsTestimonialModalOpen(true)}
-              className="bg-black text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-gray-800 transition shrink-0"
-            >
-              Tulis Testimoni
-            </button>
           </div>
-
-          {testimonials.length === 0 ? (
-            <div className="text-center text-gray-400 py-12 bg-[#fbfbfd] rounded-2xl">
-              <p>Belum ada testimoni. Jadilah yang pertama!</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {testimonials.map(t => (
-                <div key={t.id} className="bg-[#fbfbfd] rounded-2xl overflow-hidden flex flex-col">
-                  {t.imageUrl ? (
-                    <img
-                      src={t.imageUrl}
-                      alt="Testimoni pelanggan"
-                      className="w-full aspect-[3/4] object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-64 flex items-center justify-center text-gray-300 text-sm">
-                      Tidak ada foto
-                    </div>
-                  )}
-                  <div className="px-4 py-3 border-t border-gray-100">
-                    <span className="text-xs text-gray-400">
-                      {new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* Promotions Section */}
         {promotions.filter(p => p.isActive).length > 0 && (
@@ -1638,56 +1470,6 @@ export function Storefront({
                     {checkoutStep === 3 ? 'Kirim Bukti Pembayaran' : checkoutStep === 4 ? 'Tutup Invoice' : 'Lanjutkan'}
                   </button>
                 </div>
-              </form>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Testimonial Modal */}
-      {isTestimonialModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200 shadow-2xl">
-            <div className="p-6 md:p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-black">Tulis Testimoni</h2>
-                <button onClick={() => setIsTestimonialModalOpen(false)} className="p-2 hover:bg-apple-100 rounded-full transition">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleTestimonialSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5 text-apple-500">Foto Testimoni</label>
-                  <div className="flex items-center gap-4">
-                    {testimonialForm.imageUrl && (
-                      <img
-                        src={testimonialForm.imageUrl}
-                        alt="Preview"
-                        className="w-16 h-16 object-cover rounded-lg border border-gray-200 shrink-0"
-                      />
-                    )}
-                    <input
-                      required
-                      type="file"
-                      accept="image/*, .heic, .heif"
-                      onChange={handleTestimonialImageUpload}
-                      disabled={isUploadingTestimonial}
-                      className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#0066cc]/10 file:text-[#0066cc] hover:file:bg-[#0066cc]/20 transition-colors cursor-pointer disabled:opacity-50"
-                    />
-                  </div>
-                  {isUploadingTestimonial && (
-                    <span className="text-xs text-blue-600 mt-2 inline-block">Memproses gambar...</span>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isUploadingTestimonial || isSubmittingTestimonial || !testimonialForm.imageFile}
-                  className="w-full py-3 bg-black text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-50"
-                >
-                  {isSubmittingTestimonial ? 'Mengirim...' : 'Kirim Foto'}
-                </button>
               </form>
             </div>
           </Card>

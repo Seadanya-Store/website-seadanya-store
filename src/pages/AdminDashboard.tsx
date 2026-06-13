@@ -721,6 +721,10 @@ export function AdminDashboard({
   // ── Testimonial State ──────────────────────────────────────────────────────
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [isTestimonialsLoading, setIsTestimonialsLoading] = useState(false);
+  const [isAddTestimonialOpen, setIsAddTestimonialOpen] = useState(false);
+  const [addTestimonialFile, setAddTestimonialFile] = useState<File | null>(null);
+  const [addTestimonialPreview, setAddTestimonialPreview] = useState('');
+  const [isUploadingNewTestimonial, setIsUploadingNewTestimonial] = useState(false);
   const [isDeletingTestimonial, setIsDeletingTestimonial] = useState<string | null>(null);
   const [isEditingTestimonial, setIsEditingTestimonial] = useState<string | null>(null);
 
@@ -744,6 +748,96 @@ export function AdminDashboard({
     };
     fetchTestimonials();
   }, [activeTab]);
+
+  const handleAddTestimonialFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const isHeic =
+        file.type === 'image/heic' ||
+        file.type === 'image/heif' ||
+        file.name.toLowerCase().endsWith('.heic') ||
+        file.name.toLowerCase().endsWith('.heif');
+
+      if (isHeic) {
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg' });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        file = new File([blob], file.name.replace(/\.heic$/i, '.jpeg'), { type: 'image/jpeg' });
+      }
+
+      const resizedFile = await new Promise<File>((resolve, reject) => {
+        const objectUrl = URL.createObjectURL(file!);
+        const img = new Image();
+        img.onload = () => {
+          const MAX_SIZE = 600;
+          let { width, height } = img;
+          if (width > height) {
+            if (width > MAX_SIZE) { height = Math.round(height * MAX_SIZE / width); width = MAX_SIZE; }
+          } else {
+            if (height > MAX_SIZE) { width = Math.round(width * MAX_SIZE / height); height = MAX_SIZE; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(blob => {
+            URL.revokeObjectURL(objectUrl);
+            if (!blob) return reject(new Error('Blob null'));
+            resolve(new File([blob], `testimonial-${Date.now()}.webp`, { type: 'image/webp' }));
+          }, 'image/webp', 0.8);
+        };
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Load error')); };
+        img.src = objectUrl;
+      });
+
+      setAddTestimonialFile(resizedFile);
+      setAddTestimonialPreview(URL.createObjectURL(resizedFile));
+    } catch (err) {
+      console.error('Error memproses gambar:', err);
+      alert('Gagal memproses gambar.');
+    }
+  };
+
+  // ── Submit Add Testimoni ────────────────────────────────────────────────────
+  const handleAddTestimonialSubmit = async () => {
+    if (!addTestimonialFile) return;
+    setIsUploadingNewTestimonial(true);
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('testimonial-images')
+        .upload(addTestimonialFile.name, addTestimonialFile);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('testimonial-images')
+        .getPublicUrl(addTestimonialFile.name);
+
+      const { data, error: insertError } = await supabase
+        .from('testimonials')
+        .insert({ image_url: urlData.publicUrl })
+        .select()
+        .single();
+      if (insertError) throw insertError;
+
+      if (data) {
+        setTestimonials(prev => [
+          { id: data.id, imageUrl: `${urlData.publicUrl}?t=${Date.now()}`, date: data.created_at },
+          ...prev,
+        ]);
+      }
+
+      // Reset
+      setAddTestimonialFile(null);
+      setAddTestimonialPreview('');
+      setIsAddTestimonialOpen(false);
+    } catch (err) {
+      console.error('Gagal upload testimoni:', err);
+      alert('Gagal mengunggah foto testimoni.');
+    } finally {
+      setIsUploadingNewTestimonial(false);
+    }
+  };
 
   // ── Delete Testimonial ─────────────────────────────────────────────────────
   const handleAdminDeleteTestimonial = async (id: string, imageUrl: string) => {
@@ -1432,9 +1526,14 @@ export function AdminDashboard({
               <h2 className="text-3xl font-semibold tracking-tight text-black">
                 Manajemen Testimoni
               </h2>
-              <span className="text-sm text-gray-500 bg-white border border-gray-200 px-4 py-2 rounded-xl">
-                {testimonials.length} foto testimoni
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-500 bg-white border border-gray-200 px-4 py-2 rounded-xl">
+                  {testimonials.length} foto testimoni
+                </span>
+                <Button onClick={() => setIsAddTestimonialOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" /> Upload Foto
+                </Button>
+              </div>
             </div>
 
             {isTestimonialsLoading ? (
@@ -1889,6 +1988,103 @@ export function AdminDashboard({
                   </Button>
                 </div>
               </form>
+            </Card>
+          </div>
+        )}
+
+        {/* ── Modal: Add Testimoni ─────────────────────────────────────────────── */}
+        {isAddTestimonialOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+            <Card className="w-full max-w-md bg-white shadow-2xl rounded-2xl overflow-hidden animate-in zoom-in-95">
+              <div className="flex justify-between items-center p-6 border-b border-gray-100">
+                <h3 className="text-xl font-bold text-black">Upload Foto Testimoni</h3>
+                <button
+                  onClick={() => {
+                    setIsAddTestimonialOpen(false);
+                    setAddTestimonialFile(null);
+                    setAddTestimonialPreview('');
+                  }}
+                  className="text-gray-400 hover:text-black transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {/* Area upload / preview */}
+                {addTestimonialPreview ? (
+                  <div className="relative rounded-xl overflow-hidden border border-gray-200">
+                    <img
+                      src={addTestimonialPreview}
+                      alt="Preview"
+                      className="w-full aspect-[3/4] object-cover"
+                    />
+                    <button
+                      onClick={() => {
+                        setAddTestimonialFile(null);
+                        setAddTestimonialPreview('');
+                      }}
+                      className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-full aspect-[3/4] border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-[#0066cc] hover:bg-blue-50/30 transition-colors group">
+                    <div className="flex flex-col items-center gap-3 text-gray-400 group-hover:text-[#0066cc] transition-colors">
+                      <div className="w-12 h-12 rounded-full bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
+                        <Plus className="w-6 h-6" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-semibold">Pilih Foto</p>
+                        <p className="text-xs mt-1 text-gray-400">JPG, PNG, WEBP, HEIC</p>
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*, .heic, .heif"
+                      className="hidden"
+                      onChange={handleAddTestimonialFileSelect}
+                    />
+                  </label>
+                )}
+
+                {/* Info */}
+                <p className="text-xs text-gray-400 text-center">
+                  Foto akan ditampilkan dalam format portrait (3:4) di halaman utama
+                </p>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setIsAddTestimonialOpen(false);
+                      setAddTestimonialFile(null);
+                      setAddTestimonialPreview('');
+                    }}
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    type="button"
+                    className="flex-1 bg-[#0066cc] text-white"
+                    disabled={!addTestimonialFile || isUploadingNewTestimonial}
+                    onClick={handleAddTestimonialSubmit}
+                  >
+                    {isUploadingNewTestimonial ? (
+                      <span className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Mengunggah...
+                      </span>
+                    ) : (
+                      'Upload Foto'
+                    )}
+                  </Button>
+                </div>
+              </div>
             </Card>
           </div>
         )}
