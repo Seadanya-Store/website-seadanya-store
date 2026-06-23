@@ -934,7 +934,7 @@ export function Storefront({
                   Solusi Pintar untuk Siklus Hidup Gadget Anda.
                 </p>
                 <p className="text-base text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                  Di Seadanya Store, kami believe bahwa teknologi hebat tidak harus selalu mahal atau merusak lingkungan. 
+                  Di Seadanya Store, kami percaya bahwa teknologi hebat tidak harus selalu mahal atau merusak lingkungan. 
                   Kami hadir sebagai mitra terpercaya yang siap melayani segala kebutuhan gadget Anda—mulai dari tukar tambah, 
                   penjualan unit bekas berkualitas, hingga servis profesional. Kami berkomitmen menciptakan ekosistem gadget yang 
                   berkelanjutan agar teknologi tetap dapat dinikmati secara maksimal oleh siapa saja.
