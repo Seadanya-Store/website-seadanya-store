@@ -1025,6 +1025,43 @@ export function Storefront({
                   </div>
                 </div>
               </div>
+
+              {/* Testimoni Pelanggan */}
+              <br />
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-24">
+                  <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                    <h2 className="text-3xl md:text-4xl font-bold text-black tracking-tight">Testimoni Pelanggan</h2>
+                  </div>
+
+                  {testimonials.length === 0 ? (
+                    <div className="text-center text-gray-400 py-12 bg-[#fbfbfd] rounded-2xl">
+                      <p>Belum ada testimoni. Jadilah yang pertama!</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {testimonials.map(t => (
+                        <div key={t.id} className="bg-[#fbfbfd] rounded-2xl overflow-hidden flex flex-col">
+                          {t.imageUrl ? (
+                            <img
+                              src={t.imageUrl}
+                              alt="Testimoni pelanggan"
+                              className="w-full aspect-[3/4] object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-64 flex items-center justify-center text-gray-300 text-sm">
+                              Tidak ada foto
+                            </div>
+                          )}
+                          <div className="px-4 py-3 border-t border-gray-100">
+                            <span className="text-xs text-gray-400">
+                              {new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
             </div>
           </div>
         </div>
@@ -1514,42 +1551,6 @@ export function Storefront({
           </Card>
         </div>
       )}
-      
-      {/* Testimoni Pelanggan */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-24">
-          <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-            <h2 className="text-3xl md:text-4xl font-bold text-black tracking-tight">Testimoni Pelanggan</h2>
-          </div>
-
-          {testimonials.length === 0 ? (
-            <div className="text-center text-gray-400 py-12 bg-[#fbfbfd] rounded-2xl">
-              <p>Belum ada testimoni. Jadilah yang pertama!</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {testimonials.map(t => (
-                <div key={t.id} className="bg-[#fbfbfd] rounded-2xl overflow-hidden flex flex-col">
-                  {t.imageUrl ? (
-                    <img
-                      src={t.imageUrl}
-                      alt="Testimoni pelanggan"
-                      className="w-full aspect-[3/4] object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-64 flex items-center justify-center text-gray-300 text-sm">
-                      Tidak ada foto
-                    </div>
-                  )}
-                  <div className="px-4 py-3 border-t border-gray-100">
-                    <span className="text-xs text-gray-400">
-                      {new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
       {/* Chat Widget */}
       <div className="fixed bottom-6 right-6 z-50">
