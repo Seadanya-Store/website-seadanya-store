@@ -52,6 +52,7 @@ export function Storefront({
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const heroProducts = products.slice(0, 5);
   const [formData, setFormData] = useState<BuktiPembayaranFormData>(EMPTY_EVIDENCE_FORM);
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   const goToNext = useCallback(() => {
     setHeroIndex(prev => (prev + 1) % Math.max(heroProducts.length, 1));
@@ -1622,15 +1623,22 @@ export function Storefront({
             </div>
             
             <div className="flex flex-wrap gap-3 mt-8 md:mt-0 relative z-10 w-full md:w-auto md:justify-end shrink-0">
-              <div className="bg-white/10 backdrop-blur-md border border-white/10 text-white px-5 py-2.5 rounded-full text-sm font-medium flex items-center gap-2 whitespace-nowrap hover:bg-white/20 transition cursor-pointer">
-                    <a
-                              href="https://maps.app.goo.gl/opMze8jeFrwbW69L9?g_st=aw"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-apple-blue hover:opacity-75 transition"
-                            >Buka di Google Maps
-                    </a>
-              </div>
+              <a
+                href="https://maps.app.goo.gl/opMze8jeFrwbW69L9?g_st=aw"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`group inline-flex items-center gap-3 rounded-full border px-7 py-3.5 font-black text-sm backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] ${
+                  isDarkMode
+                    ? "border-white/10 bg-white/5 text-white hover:bg-white/10" 
+                    : "border-black/10 bg-white text-neutral-900 hover:bg-neutral-50 shadow-sm"
+                }`}
+              >
+                Buka di Google Maps
+                <ArrowRight 
+                  size={16} 
+                  className="transition-transform duration-300 group-hover:translate-x-1 text-blue-500" 
+                />
+              </a>
             </div>
           </div>
         </div>
