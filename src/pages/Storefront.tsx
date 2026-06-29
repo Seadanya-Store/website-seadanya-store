@@ -52,6 +52,7 @@ export function Storefront({
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const heroProducts = products.slice(0, 5);
   const [formData, setFormData] = useState<BuktiPembayaranFormData>(EMPTY_EVIDENCE_FORM);
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   const goToNext = useCallback(() => {
     setHeroIndex(prev => (prev + 1) % Math.max(heroProducts.length, 1));
@@ -1611,6 +1612,36 @@ export function Storefront({
           {isChatOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
         </button>
       </div>
+
+        <div className="bg-[#0a0a0a] text-white relative overflow-hidden" style={{ minHeight: '420px' }}>
+          <div className="bg-black rounded-3xl p-8 md:p-12 flex flex-col md:flex-row items-center justify-between overflow-hidden relative shadow-2xl">
+            <div className="flex items-start gap-6 relative z-10 w-full md:w-auto">
+              <div className="flex-1">
+                <h2 className="text-2xl md:text-3xl font-bold text-white mb-3 tracking-tight">Kunjungi Store Offline Kami</h2>
+                <p className="text-gray-400 max-w-md text-sm md:text-base leading-relaxed">Lingkungan Parigi No.42, RT.02/RW.11, Kotakulon, Kec. Sumedang Sel., Kabupaten Sumedang, Jawa Barat 45312</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap gap-3 mt-8 md:mt-0 relative z-10 w-full md:w-auto md:justify-end shrink-0">
+              <a
+                href="https://maps.app.goo.gl/opMze8jeFrwbW69L9?g_st=aw"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`group inline-flex items-center gap-3 rounded-full border px-7 py-3.5 font-black text-sm backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] ${
+                  isDarkMode
+                    ? "border-white/10 bg-white/5 text-white hover:bg-white/10" 
+                    : "border-black/10 bg-white text-neutral-900 hover:bg-neutral-50 shadow-sm"
+                }`}
+              >
+                Buka di Google Maps
+                <ArrowRight 
+                  size={16} 
+                  className="transition-transform duration-300 group-hover:translate-x-1 text-blue-500" 
+                />
+              </a>
+            </div>
+          </div>
+        </div>
 
     </div>
   );
