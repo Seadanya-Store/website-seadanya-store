@@ -846,6 +846,66 @@ export function Storefront({
             })}
           </div>
         </div>
+            
+        {/* ── Offline Store Section ─────────────────────────────────────── */}
+        <div className="bg-[#0a0a0a] py-16 md:py-24">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-8 md:p-14 flex flex-col md:flex-row items-center justify-between gap-10">
+              
+              {/* Decorative blur */}
+              <div className="absolute -top-20 -left-20 w-72 h-72 bg-blue-600/20 rounded-full blur-[100px] pointer-events-none" />
+              <div className="absolute -bottom-20 -right-20 w-72 h-72 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+              {/* Left: Info */}
+              <div className="relative z-10 flex items-start gap-6 flex-1">
+                <div className="text-5xl md:text-6xl" role="img" aria-label="Location">📍</div>
+                <div>
+                  <p className="text-xs font-bold tracking-widest text-[#0066cc] uppercase mb-2">
+                    Kunjungi Kami Langsung
+                  </p>
+                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-3 tracking-tight">
+                    Store Offline Kami
+                  </h2>
+                  <p className="text-gray-400 max-w-md text-sm md:text-base leading-relaxed">
+                    Lingkungan Parigi No.42, RT.02/RW.11, Kotakulon,<br />
+                    Kec. Sumedang Sel., Kabupaten Sumedang,<br />
+                    Jawa Barat 45312
+                  </p>
+                  <div className="flex flex-wrap items-center gap-4 mt-5 text-sm text-gray-500">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-green-400">●</span> Buka Setiap Hari
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-yellow-400">⏰</span> 09.00 – 21.00 WIB
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: CTA */}
+              <div className="relative z-10 flex flex-col sm:flex-row md:flex-col gap-3 shrink-0 w-full md:w-auto">
+                <a
+                  href="https://maps.app.goo.gl/opMze8jeFrwbW69L9?g_st=aw"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-3 rounded-full bg-white text-black px-7 py-3.5 font-bold text-sm hover:bg-gray-100 transition-all duration-300 hover:scale-[1.02] shadow-xl"
+                >
+                  Buka di Google Maps
+                  <ArrowRight size={16} className="text-[#0066cc]" />
+                </a>
+                <a
+                  href="https://wa.me/085861969844"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-3 rounded-full border border-white/10 bg-white/5 text-white px-7 py-3.5 font-semibold text-sm hover:bg-white/10 transition-all duration-300 hover:scale-[1.02] backdrop-blur-xl"
+                >
+                  Hubungi via WhatsApp
+                  <span className="text-green-400">💬</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
 
       {/* Product Detail Modal */}
@@ -1612,36 +1672,6 @@ export function Storefront({
           {isChatOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
         </button>
       </div>
-
-        <div className="bg-[#0a0a0a] text-white relative overflow-hidden" style={{ minHeight: '420px' }}>
-          <div className="bg-black rounded-3xl p-8 md:p-12 flex flex-col md:flex-row items-center justify-between overflow-hidden relative shadow-2xl">
-            <div className="flex items-start gap-6 relative z-10 w-full md:w-auto">
-              <div className="flex-1">
-                <h2 className="text-2xl md:text-3xl font-bold text-white mb-3 tracking-tight">Kunjungi Store Offline Kami</h2>
-                <p className="text-gray-400 max-w-md text-sm md:text-base leading-relaxed">Lingkungan Parigi No.42, RT.02/RW.11, Kotakulon, Kec. Sumedang Sel., Kabupaten Sumedang, Jawa Barat 45312</p>
-              </div>
-            </div>
-            
-            <div className="flex flex-wrap gap-3 mt-8 md:mt-0 relative z-10 w-full md:w-auto md:justify-end shrink-0">
-              <a
-                href="https://maps.app.goo.gl/opMze8jeFrwbW69L9?g_st=aw"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`group inline-flex items-center gap-3 rounded-full border px-7 py-3.5 font-black text-sm backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] ${
-                  isDarkMode
-                    ? "border-white/10 bg-white/5 text-white hover:bg-white/10" 
-                    : "border-black/10 bg-white text-neutral-900 hover:bg-neutral-50 shadow-sm"
-                }`}
-              >
-                Buka di Google Maps
-                <ArrowRight 
-                  size={16} 
-                  className="transition-transform duration-300 group-hover:translate-x-1 text-blue-500" 
-                />
-              </a>
-            </div>
-          </div>
-        </div>
 
     </div>
   );

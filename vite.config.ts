@@ -23,25 +23,25 @@ export default defineConfig(({ mode }) => {
     },
     // --- TAMBAHKAN BLOK BUILD DI BAWAH INI ---
     build: {
-      chunkSizeWarningLimit: 2000,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            // Memisahkan secara paksa library heic2any
-            if (id.includes('node_modules/heic2any')) {
-              return 'heic-converter';
-            }
-            // Memisahkan core vendor react/dom
-            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
-              return 'react-core';
-            }
-            // Sisanya dipisah per folder library masing-masing
-            if (id.includes('node_modules')) {
-              return 'vendor-libs';
-            }
-          },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Pisahkan heic-converter ke chunk sendiri (lazy loaded)
+          if (id.includes('heic-convert') || id.includes('heic2any')) {
+            return 'heic-converter';
+          }
+          // Perbaiki circular chunk warning sekaligus
+          if (id.includes('node_modules/react') || 
+              id.includes('node_modules/react-dom') ||
+              id.includes('node_modules/scheduler')) {
+            return 'react-core';
+          }
+          if (id.includes('node_modules')) {
+            return 'vendor-libs';
+          }
         },
       },
     },
+  },
   };
 });
