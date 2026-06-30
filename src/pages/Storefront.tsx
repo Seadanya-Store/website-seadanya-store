@@ -894,7 +894,7 @@ export function Storefront({
                   <ArrowRight size={16} className="text-[#0066cc]" />
                 </a>
                 <a
-                  href="https://wa.me/085861969844"
+                  href="https://wa.me/6281222583216"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-3 rounded-full border border-white/10 bg-white/5 text-white px-7 py-3.5 font-semibold text-sm hover:bg-white/10 transition-all duration-300 hover:scale-[1.02] backdrop-blur-xl"
@@ -1575,7 +1575,7 @@ export function Storefront({
                             <span className="text-apple-blue flex-shrink-0 mt-0.5">ℹ</span>
                             Konfirmasi pembayaran lewat WhatsApp{" "}
                             <a
-                              href="https://wa.me/085861969844"
+                              href="https://wa.me/6281222583216"
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-apple-blue underline hover:opacity-75 transition"
