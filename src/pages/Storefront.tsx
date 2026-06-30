@@ -876,7 +876,7 @@ export function Storefront({
                       <span className="text-green-400">●</span> Buka Setiap Hari
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="text-yellow-400">⏰</span> 09.00 – 21.00 WIB
+                      <span className="text-yellow-400">⏰</span> 24 Jam
                     </span>
                   </div>
                 </div>
